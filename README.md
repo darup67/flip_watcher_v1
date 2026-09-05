@@ -1,5 +1,7 @@
 # Flip Notifier
 
+Flip Watcher App — v1 — Buy/Sell Signals
+
 Local macOS desktop notifications for the TradingView **Watchlist Flip Scanner**.
 
 Independent of TradingView's alert system. It reads the study's on-chart table
