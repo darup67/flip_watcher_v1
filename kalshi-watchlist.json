@@ -1,0 +1,22 @@
+{
+  "_comment": "Kalshi series to watch. Series tickers are the prefix before the first dash in a market ticker. Find them at kalshi.com or via /series endpoint.",
+  "series": [
+    { "ticker": "KXFED",        "label": "Fed funds rate" },
+    { "ticker": "KXCPI",        "label": "CPI inflation" },
+    { "ticker": "KXBTCD",       "label": "Bitcoin daily" },
+    { "ticker": "KXETHD",       "label": "Ethereum daily" },
+    { "ticker": "KXNASDAQ100",  "label": "Nasdaq-100" },
+    { "ticker": "KXINX",        "label": "S&P 500" },
+    { "ticker": "KXRECSSNBER",  "label": "Recession" },
+    { "ticker": "KXU3EOY",      "label": "Unemployment EOY" }
+  ],
+  "_pinned_comment": "Specific market tickers to always watch regardless of volume.",
+  "pinned": [],
+  "thresholds": {
+    "_comment": "min_volume_24h: ignore markets thinner than this unless pinned. move_cents: alert when the YES mid moves this many cents since the last poll. vol_spike_x: alert when 24h volume multiplies by this factor.",
+    "min_volume_24h": 500,
+    "move_cents": 10,
+    "vol_spike_x": 3.0,
+    "vol_spike_floor": 1000
+  }
+}

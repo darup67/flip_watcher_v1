@@ -4,6 +4,9 @@ state.json
 alerts.tsv
 core-probe*.csv
 expected-symbols.json
+kalshi-state.json
+kalshi-alerts.tsv
+.kalshi.lock
 
 # Editor / backup debris
 *.bak
