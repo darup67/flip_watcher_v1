@@ -83,6 +83,9 @@ node kalshi-watcher.js --test           # fire a sample alert
 node kalshi-watcher.js --reset          # clear state, re-baseline silently
 node kalshi-watcher.js --discover FED   # find series tickers by keyword
 
+node healthcheck.js                     # covers BOTH watchers
+node healthcheck.js --repair            # ...and reloads either unloaded agent
+
 launchctl list | grep kalshiwatcher
 tail -30 kalshi-watcher.log
 ```
@@ -98,11 +101,33 @@ exponentially (1s → 8s, honouring `Retry-After` when sent) for up to 4 retries
 A single failing series is logged as a partial read; the poll still completes on
 the rest.
 
+## Health check
+
+`healthcheck.js` covers both watchers. The Kalshi group is **optional** — if
+`com.dhruv.kalshiwatcher.plist` is absent the whole group reports one INFO line
+and is skipped, so a machine that only runs the flip watcher never sees a red
+line for something it deliberately does not have.
+
+| Check | FAILs when |
+|---|---|
+| Kalshi agent | LaunchAgent not loaded (`--repair` reloads it) |
+| Kalshi API | public market data unreachable (429 is a WARN — the watcher retries) |
+| Kalshi watchlist | file missing, unreadable, or no series configured |
+| Kalshi state | lock wedged >5 min, state unreadable, or last good read >15 min ago |
+| Kalshi log | 3+ consecutive failures with no success since |
+
+When `--notify` fires, the banner names the watcher that actually broke —
+"✗ Kalshi Watcher BROKEN" vs "✗ Flip Watcher BROKEN", or "Asset Watchers" when
+both are unhappy. A generic title sends you to the wrong stack.
+
+All five paths verified by fault injection: unreachable API, wedged lock,
+unloaded agent (and its `--repair`), empty watchlist, and absent plist.
+
 ## Failure modes
 
 | If this breaks | Symptom | Caught by |
 |---|---|---|
-| Kalshi API down | no markets read | blind alert after 3 polls (~15 min) |
+| Kalshi API down | no markets read | blind alert after 3 polls (~15 min); daily check |
 | One series 404s | that series missing | `WARN partial read`, poll continues on the rest |
 | Rate limited | 429 | paced + exponential backoff, 4 retries |
 | Watchlist corrupt | no series to poll | refuses, alerts, leaves the file alone |

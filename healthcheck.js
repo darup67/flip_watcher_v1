@@ -29,6 +29,18 @@ const CDP_HOST = process.env.FLIP_CDP || '127.0.0.1:9222';
 const STALE_AFTER_S = 300;   // state older than this means polling has stopped
 const EXPECTED_TF = process.env.FLIP_EXPECTED_TF || '30';  // Scanner's in_2 timeframe input
 
+/* Kalshi watcher — the second asset class. See KALSHI.md. */
+const K_PLIST      = join(homedir(), 'Library/LaunchAgents/com.dhruv.kalshiwatcher.plist');
+const K_STATE_FILE = join(HERE, 'kalshi-state.json');
+const K_LOG_FILE   = join(HERE, 'kalshi-watcher.log');
+const K_LOCK_FILE  = join(HERE, '.kalshi.lock');
+const K_WATCHLIST  = join(HERE, 'kalshi-watchlist.json');
+const K_API        = process.env.KALSHI_API || 'https://external-api.kalshi.com/trade-api/v2';
+// It polls every 300s, so its staleness bar has to be looser than the flip
+// watcher's. Three missed polls is the same "something is actually wrong"
+// signal that 5 missed 60s polls is on the other side.
+const K_STALE_AFTER_S = 900;
+
 const checks = [];
 const add = (name, status, detail) => checks.push({ name, status, detail });
 const log = msg => process.stderr.write(`  ${msg}\n`);
@@ -444,9 +456,168 @@ function checkLog() {
   }
 }
 
+/* ==================================================================
+ * Kalshi watcher — second asset class, independent stack.
+ *
+ * Treated as OPTIONAL throughout: if the plist is absent the whole group
+ * reports INFO and is skipped, so a machine that only runs the flip watcher
+ * never sees a red line for a thing it deliberately does not have.
+ * ================================================================== */
+
+const kalshiInstalled = () => existsSync(K_PLIST);
+
+/* -------------------------------------------------- K1. agent */
+
+async function checkKalshiAgent() {
+  if (!kalshiInstalled()) {
+    return add('Kalshi agent', 'INFO', 'not installed — prediction markets not watched');
+  }
+  let { out } = await run('/bin/launchctl', ['list']);
+  let line = out.split('\n').find(l => l.includes('com.dhruv.kalshiwatcher'));
+
+  if (!line && process.argv.includes('--repair')) {
+    await run('/bin/launchctl', ['load', K_PLIST]);
+    ({ out } = await run('/bin/launchctl', ['list']));
+    line = out.split('\n').find(l => l.includes('com.dhruv.kalshiwatcher'));
+    if (line) return add('Kalshi agent', 'WARN', 'was unloaded — reloaded by --repair');
+  }
+  if (!line) {
+    return add('Kalshi agent', 'FAIL',
+      'LaunchAgent not loaded — rerun with --repair, or launchctl load the plist');
+  }
+  const lastExit = line.trim().split(/\s+/)[1];
+  if (lastExit !== '0') {
+    return add('Kalshi agent', 'WARN', `loaded, but last run exited ${lastExit}`);
+  }
+  add('Kalshi agent', 'OK', 'LaunchAgent loaded, last run clean');
+}
+
+/* -------------------------------------------------- K2. API reachability */
+
+/**
+ * One cheap request. Deliberately NOT a full watchlist sweep — that is the
+ * poller's job and would multiply this check's cost by the number of series.
+ * All we are asking is "does Kalshi answer us right now".
+ */
+async function checkKalshiApi() {
+  if (!kalshiInstalled()) return;
+  try {
+    const res = await fetch(`${K_API}/markets?limit=1&status=open`, {
+      signal: AbortSignal.timeout(10000),
+      headers: { Accept: 'application/json' },
+    });
+    if (res.status === 429) {
+      return add('Kalshi API', 'WARN', 'rate limited (429) — watcher backs off and retries');
+    }
+    if (!res.ok) return add('Kalshi API', 'FAIL', `HTTP ${res.status} from ${K_API}`);
+    const d = await res.json();
+    if (!Array.isArray(d.markets)) return add('Kalshi API', 'FAIL', 'unexpected response shape');
+    add('Kalshi API', 'OK', 'public market data reachable');
+  } catch (e) {
+    add('Kalshi API', 'FAIL', `unreachable: ${e.message}`);
+  }
+}
+
+/* -------------------------------------------------- K3. watchlist */
+
+function checkKalshiWatchlist() {
+  if (!kalshiInstalled()) return;
+  if (!existsSync(K_WATCHLIST)) {
+    return add('Kalshi watchlist', 'FAIL', 'kalshi-watchlist.json missing — nothing to poll');
+  }
+  try {
+    const w = JSON.parse(readFileSync(K_WATCHLIST, 'utf8'));
+    const series = Array.isArray(w.series) ? w.series.filter(s => s && s.ticker) : [];
+    if (!series.length) {
+      return add('Kalshi watchlist', 'FAIL', 'no series configured — nothing to poll');
+    }
+    const pins = Array.isArray(w.pinned) ? w.pinned.length : 0;
+    add('Kalshi watchlist', 'OK',
+      `${series.length} series${pins ? ` + ${pins} pinned` : ''} · ${series.map(s => s.ticker).join(' ')}`);
+  } catch (e) {
+    add('Kalshi watchlist', 'FAIL', `unreadable: ${e.message}`);
+  }
+}
+
+/* -------------------------------------------------- K4. state + lock */
+
+function checkKalshiState() {
+  if (!kalshiInstalled()) return;
+
+  // A wedged lock silently stops every future poll, so check it before state:
+  // stale state with a held lock has a different cause than stale state alone.
+  if (existsSync(K_LOCK_FILE)) {
+    const ageS = (Date.now() - statSync(K_LOCK_FILE).mtimeMs) / 1000;
+    if (ageS > 300) {
+      return add('Kalshi state', 'FAIL',
+        `lock held ${Math.round(ageS / 60)} min — a poll is wedged; delete .kalshi.lock`);
+    }
+  }
+
+  if (!existsSync(K_STATE_FILE)) {
+    return add('Kalshi state', 'WARN', 'no state yet — first poll has not completed');
+  }
+  let s;
+  try { s = JSON.parse(readFileSync(K_STATE_FILE, 'utf8')); }
+  catch (e) { return add('Kalshi state', 'FAIL', `unreadable: ${e.message}`); }
+
+  const n = Object.keys(s.markets || {}).length;
+  if (s.failures > 0) {
+    return add('Kalshi state', 'WARN',
+      `${s.failures} consecutive failed polls — ${s.lastFailure || 'unknown'}`);
+  }
+  const age = (Date.now() - new Date(s.updated).getTime()) / 1000;
+  if (age > K_STALE_AFTER_S) {
+    return add('Kalshi state', 'FAIL',
+      `last good read ${Math.round(age / 60)} min ago — polling has stopped`);
+  }
+  add('Kalshi state', 'OK', `fresh (${Math.round(age)}s old, ${n} markets tracked)`);
+}
+
+/* -------------------------------------------------- K5. log */
+
+function checkKalshiLog() {
+  if (!kalshiInstalled()) return;
+  if (!existsSync(K_LOG_FILE)) return add('Kalshi log', 'WARN', 'no log yet');
+  const lines = readFileSync(K_LOG_FILE, 'utf8').trim().split('\n');
+  const cutoff = Date.now() - 24 * 3600 * 1000;
+  const recent = lines.filter(l => {
+    const ts = Date.parse(l.slice(0, 24));
+    return !Number.isNaN(ts) && ts > cutoff;
+  });
+  const fails = recent.filter(l => /FAIL|ERROR|FATAL/.test(l)).length;
+  const alerts = recent.filter(l => l.includes('ALERTED:')).length;
+  const size = (statSync(K_LOG_FILE).size / 1024).toFixed(0);
+
+  // Same reasoning as the flip watcher's log check: consecutive failures with
+  // no success after them is the only shape that means "broken right now".
+  let sinceSuccess = 0;
+  let lastOkAt = null;
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const l = lines[i];
+    if (/no signals|ALERTED:|baseline saved|settling/.test(l)) {
+      lastOkAt = Date.parse(l.slice(0, 24)); break;
+    }
+    if (/FAIL|ERROR|FATAL/.test(l)) sinceSuccess += 1;
+  }
+
+  const detail = `${recent.length} polls / ${fails} failures / ${alerts} signals in 24h · ${size} KB`;
+
+  if (sinceSuccess >= 3) {
+    add('Kalshi log', 'FAIL', `${sinceSuccess} consecutive failures, no success since · ${detail}`);
+  } else if (sinceSuccess > 0) {
+    add('Kalshi log', 'WARN', `${sinceSuccess} failure(s) since last success · ${detail}`);
+  } else {
+    const mins = lastOkAt ? Math.round((Date.now() - lastOkAt) / 60000) : null;
+    const age = mins === null ? '' : ` · last success ${mins}m ago`;
+    add('Kalshi log', 'OK', `${detail}${age}`);
+  }
+}
+
 /* -------------------------------------------------- report */
 
 async function main() {
+  // --- TradingView flip watcher ---
   await checkScheduler();
   const page = await checkChart();
   const regimes = await checkStudy(page);
@@ -457,21 +628,36 @@ async function main() {
   await checkAlerts();
   checkLog();
 
+  // --- Kalshi prediction-market watcher (skipped if not installed) ---
+  await checkKalshiAgent();
+  await checkKalshiApi();
+  checkKalshiWatchlist();
+  checkKalshiState();
+  checkKalshiLog();
+
   const fails = checks.filter(c => c.status === 'FAIL');
   const warns = checks.filter(c => c.status === 'WARN');
   const verdict = fails.length ? 'BROKEN' : warns.length ? 'DEGRADED' : 'HEALTHY';
 
   const icon = { OK: '✓', WARN: '!', FAIL: '✗', INFO: '·' };
   const w = Math.max(...checks.map(c => c.name.length));
-  process.stdout.write(`\nFlip Notifier — ${verdict}   ${new Date().toLocaleString()}\n\n`);
+  process.stdout.write(`\nAsset Watchers — ${verdict}   ${new Date().toLocaleString()}\n\n`);
   for (const c of checks) {
     process.stdout.write(`  ${icon[c.status]} ${c.name.padEnd(w)}  ${c.detail}\n`);
   }
   process.stdout.write('\n');
 
   if (process.argv.includes('--notify') && verdict !== 'HEALTHY') {
-    const summary = (fails[0] || warns[0]).detail;
-    const title = fails.length ? '✗ Flip Watcher BROKEN' : '! Flip Watcher degraded';
+    // Name the watcher that actually broke. "Flip Watcher BROKEN" when the
+    // fault is on the Kalshi side sends you to the wrong stack.
+    const worst = fails[0] || warns[0];
+    const isKalshi = worst.name.startsWith('Kalshi');
+    const only = (fails.length ? fails : warns);
+    const both = only.some(c => c.name.startsWith('Kalshi')) &&
+                 only.some(c => !c.name.startsWith('Kalshi'));
+    const who = both ? 'Asset Watchers' : isKalshi ? 'Kalshi Watcher' : 'Flip Watcher';
+    const title = fails.length ? `✗ ${who} BROKEN` : `! ${who} degraded`;
+    const summary = `${worst.name}: ${worst.detail}`;
     await run('/usr/bin/osascript',
       ['-e', `display notification "${summary.replace(/"/g, "'")}" with title "${title}"`]);
     await run('/usr/bin/afplay', ['/System/Library/Sounds/Basso.aiff']);
