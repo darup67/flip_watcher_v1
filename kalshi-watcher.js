@@ -291,25 +291,46 @@ async function fetchSeries(seriesTicker) {
  * Watchlist
  * ------------------------------------------------------------------ */
 
+const DEFAULT_THRESHOLDS = {
+  min_volume_24h: 500,
+  move_cents: 10,
+  vol_spike_x: 3.0,
+  vol_spike_floor: 1000,
+  no_flip: false,      // suppress FLIP signals for this series
+  no_volume: false,    // suppress VOLUME-spike signals for this series
+};
+
+/**
+ * Per-series thresholds, falling back to the file's defaults, falling back to
+ * DEFAULT_THRESHOLDS.
+ *
+ * Sports and macro cannot share one setting. A 10c move is real news on a Fed
+ * contract that trades a thousand times a day; on an NFL moneyline during a
+ * live game it is just the third quarter happening. Likewise crossing 50c means
+ * the market inverted on a macro contract, but a football favourite crosses it
+ * routinely — so sports series set no_flip and a much wider move_cents.
+ */
 function loadWatchlist() {
   if (!existsSync(WATCHLIST_FILE)) {
     return { state: 'absent', series: [], pinned: [], thresholds: {} };
   }
   try {
     const w = JSON.parse(readFileSync(WATCHLIST_FILE, 'utf8'));
-    const series = Array.isArray(w.series) ? w.series.filter(s => s && s.ticker) : [];
-    if (!series.length) return { state: 'corrupt', series: [], pinned: [], thresholds: {} };
+    const raw = Array.isArray(w.series) ? w.series.filter(s => s && s.ticker) : [];
+    if (!raw.length) return { state: 'corrupt', series: [], pinned: [], thresholds: {} };
+
+    const base = { ...DEFAULT_THRESHOLDS, ...(w.thresholds || {}) };
+    const series = raw.map(s => ({
+      ticker: s.ticker,
+      label: s.label || s.ticker,
+      thresholds: { ...base, ...(s.thresholds || {}) },
+    }));
+
     return {
       state: 'ok',
       series,
       pinned: Array.isArray(w.pinned) ? w.pinned : [],
-      thresholds: {
-        min_volume_24h: 500,
-        move_cents: 10,
-        vol_spike_x: 3.0,
-        vol_spike_floor: 1000,
-        ...(w.thresholds || {}),
-      },
+      thresholds: base,
     };
   } catch { return { state: 'corrupt', series: [], pinned: [], thresholds: {} }; }
 }
@@ -375,7 +396,10 @@ async function recordRecovery(prev) {
 
 const SCORE_EMOJI = { STRONG: '🔥', MODERATE: '⚡', WEAK: '💤' };
 
-function scoreSignal(sig, allSignals, th) {
+function scoreSignal(sig, allSignals, globalTh) {
+  // Score against the thresholds this market was actually judged by — a 25c
+  // move is "large" for macro but merely par for an NFL series whose bar is 25c.
+  const th = sig.th || globalTh;
   const factors = [];
   let score = 0;
 
@@ -505,7 +529,9 @@ async function main() {
   for (const s of wl.series) {
     try {
       const ms = await fetchSeries(s.ticker);
-      for (const m of ms) markets.push({ ...m, _series: s.ticker, _label: s.label || s.ticker });
+      for (const m of ms) {
+        markets.push({ ...m, _series: s.ticker, _label: s.label, _th: s.thresholds });
+      }
     } catch (e) { seriesErrors.push(`${s.ticker}: ${e.message}`); }
   }
 
@@ -523,7 +549,8 @@ async function main() {
     const mid = yesMidCents(m);
     if (mid === null) continue;
     const v = vol24(m);
-    if (v < th.min_volume_24h && !pinned.has(m.ticker)) continue;
+    const mth = m._th || th;
+    if (v < mth.min_volume_24h && !pinned.has(m.ticker)) continue;
     tracked.push({
       ticker: m.ticker,
       series: m._series,
@@ -532,6 +559,7 @@ async function main() {
       mid,
       volume: v,
       close: m.close_time,
+      th: mth,
     });
   }
 
@@ -611,23 +639,26 @@ async function main() {
   for (const t of tracked) {
     const p = prev.markets[t.ticker];
     if (!p) continue;                              // new market — baseline it, judge next poll
+    const mth = t.th;
 
     // FLIP: the majority belief inverted. Strictly-crossing test so a market
-    // resting exactly at 50c does not re-fire every poll.
-    if ((p.mid < 50 && t.mid >= 50) || (p.mid >= 50 && t.mid < 50)) {
+    // resting exactly at 50c does not re-fire every poll. Suppressed on series
+    // where crossing 50c is routine rather than meaningful (live sports).
+    if (!mth.no_flip &&
+        ((p.mid < 50 && t.mid >= 50) || (p.mid >= 50 && t.mid < 50))) {
       signals.push({ type: 'FLIP', ...t, from: p.mid, to: t.mid });
       continue;                                    // one signal per market per poll
     }
 
     const delta = t.mid - p.mid;
-    if (Math.abs(delta) >= th.move_cents) {
+    if (Math.abs(delta) >= mth.move_cents) {
       signals.push({ type: 'MOVE', ...t, from: p.mid, to: t.mid, delta });
       continue;
     }
 
-    if (p.volume >= 1 && t.volume >= th.vol_spike_floor) {
+    if (!mth.no_volume && p.volume >= 1 && t.volume >= mth.vol_spike_floor) {
       const mult = t.volume / p.volume;
-      if (mult >= th.vol_spike_x) {
+      if (mult >= mth.vol_spike_x) {
         signals.push({ type: 'VOLUME', ...t, from: p.mid, to: t.mid, mult });
       }
     }

@@ -1,5 +1,8 @@
 {
-  "_comment": "Kalshi series to watch. Series tickers are the prefix before the first dash in a market ticker. Find them at kalshi.com or via /series endpoint.",
+  "_comment": "Kalshi series to watch. A series ticker is the prefix before the first dash in a market ticker. Find them with: node kalshi-watcher.js --discover <keyword>",
+
+  "_thresholds_comment": "Top-level `thresholds` are the defaults. Any series can override any of them with its own `thresholds` block. Sports and macro cannot share one setting: a 10c move is news on a Fed contract and just the third quarter happening on an NFL moneyline.",
+
   "series": [
     { "ticker": "KXFED",        "label": "Fed funds rate" },
     { "ticker": "KXCPI",        "label": "CPI inflation" },
@@ -8,15 +11,30 @@
     { "ticker": "KXNASDAQ100",  "label": "Nasdaq-100" },
     { "ticker": "KXINX",        "label": "S&P 500" },
     { "ticker": "KXRECSSNBER",  "label": "Recession" },
-    { "ticker": "KXU3EOY",      "label": "Unemployment EOY" }
+    { "ticker": "KXU3EOY",      "label": "Unemployment EOY" },
+
+    { "ticker": "KXNFLGAME",    "label": "NFL winner",
+      "thresholds": { "min_volume_24h": 5000, "move_cents": 25, "no_flip": true, "no_volume": true } },
+    { "ticker": "KXNFLSPREAD",  "label": "NFL spread",
+      "thresholds": { "min_volume_24h": 5000, "move_cents": 25, "no_flip": true, "no_volume": true } },
+
+    { "ticker": "KXNCAAFGAME",  "label": "NCAAF winner",
+      "thresholds": { "min_volume_24h": 5000, "move_cents": 25, "no_flip": true, "no_volume": true } },
+    { "ticker": "KXNCAAFSPREAD", "label": "NCAAF spread",
+      "thresholds": { "min_volume_24h": 5000, "move_cents": 25, "no_flip": true, "no_volume": true } },
+    { "ticker": "KXNCAAFTOTAL", "label": "NCAAF total",
+      "thresholds": { "min_volume_24h": 5000, "move_cents": 25, "no_flip": true, "no_volume": true } }
   ],
-  "_pinned_comment": "Specific market tickers to always watch regardless of volume.",
+
+  "_pinned_comment": "Specific market tickers always watched, regardless of volume.",
   "pinned": [],
+
   "thresholds": {
-    "_comment": "min_volume_24h: ignore markets thinner than this unless pinned. move_cents: alert when the YES mid moves this many cents since the last poll. vol_spike_x: alert when 24h volume multiplies by this factor.",
     "min_volume_24h": 500,
     "move_cents": 10,
     "vol_spike_x": 3.0,
-    "vol_spike_floor": 1000
+    "vol_spike_floor": 1000,
+    "no_flip": false,
+    "no_volume": false
   }
 }
