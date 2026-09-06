@@ -25,7 +25,7 @@ healthcheck.js       ← scheduled task flip-watcher-daily-health, weekdays 08:3
 |---|---|---|
 | TradingView closed | no reads | notifier → "blind" alert after 5 polls; daily check |
 | Study removed from chart | no table | notifier → "blind" alert; daily check |
-| Study attached but dead (zombie) | table empty, study stuck in restart loop | notifier → auto-reload after 10 failures (up to 3 attempts); daily check --repair also reloads |
+| Study attached but dead (zombie) | table empty, study stuck in restart loop | notifier → auto-reload after 5 failures (~5 min, up to 3 attempts); daily check --repair also reloads |
 | LaunchAgent unloaded | no polls at all | daily check (`polling has stopped`) — the notifier cannot catch this, it isn't running |
 | Chart symbol changed | nothing — by design | n/a, `tf` is pinned to 30m and symbols are explicit |
 | Notification previews off | body text hidden | handled: flip text lives in the title |
@@ -221,6 +221,10 @@ the moment you sit down and are most likely to act on one.
 | LaunchAgent unloaded | nothing self-healed it | `healthcheck.js --repair` reloads it; the daily routine passes `--repair` |
 | Wedged lock | — | health check FAILs if a lock is held > 5 min |
 | Sleep protection stops | silent — lid close would stop overnight coverage with no warning | health check verifies the agent is loaded **and** actually holding `PreventSystemSleep`; `--repair` reloads it |
+| SIGTERM from launchd | lock file orphaned until stale detection | SIGTERM/SIGINT handler releases lock and closes CDP socket immediately |
+| Burst CDP overhead | 50+ WebSocket handshakes per burst (one per poll) | connection cached and reused across burst polls; closed at burst end |
+| Burst target discovery | 50+ HTTP requests to `/json/list` per burst | target list cached for 5s (covers a full burst, short enough to catch tab changes) |
+| TradingView drops mid-request | promise hangs until 10s timeout | WebSocket `close` event rejects immediately; cache invalidated so next poll reconnects |
 
 Read-only commands (`--status`, `--core`) skip the lock, so they work while the
 daemon polls.
