@@ -22,11 +22,12 @@ need API-key auth, which this deliberately does not hold.
 | Signal | Fires when | Meaning |
 |---|---|---|
 | 🔄 **FLIP** | YES mid crosses 50¢ | The market's majority belief inverted |
-| 📈 **MOVE** | YES mid jumps ≥ `move_cents` (10¢) since last poll | Sharp repricing |
-| 📊 **VOLUME** | 24h volume multiplies by ≥ `vol_spike_x` (3.0×) | Unusual activity |
+| 📈 **MOVE** | YES mid jumps ≥ `move_cents` since last poll | Sharp repricing |
+| 📊 **VOLUME** | 24h volume multiplies by ≥ `vol_spike_x` | Unusual activity |
 
 One signal per market per poll, in that priority order — a market that flips
-does not also report the move that carried it across.
+does not also report the move that carried it across. Thresholds are
+**per-series**; football suppresses FLIP and VOLUME entirely (see below).
 
 ## Setup quality scoring
 
@@ -55,21 +56,46 @@ or crossed book return no price at all and are skipped rather than guessed at.
 
 ```json
 {
-  "series": [{ "ticker": "KXFED", "label": "Fed funds rate" }],
+  "series": [
+    { "ticker": "KXFED", "label": "Fed funds rate" },
+    { "ticker": "KXNFLGAME", "label": "NFL winner",
+      "thresholds": { "min_volume_24h": 5000, "move_cents": 25,
+                      "no_flip": true, "no_volume": true } }
+  ],
   "pinned": ["KXBTCD-26SEP0612-T88799.99"],
   "thresholds": {
     "min_volume_24h": 500,     // ignore thinner markets unless pinned
     "move_cents": 10,          // MOVE threshold
     "vol_spike_x": 3.0,        // VOLUME multiple
-    "vol_spike_floor": 1000    // ...but only above this absolute volume
+    "vol_spike_floor": 1000,   // ...but only above this absolute volume
+    "no_flip": false,          // suppress FLIP signals
+    "no_volume": false         // suppress VOLUME signals
   }
 }
 ```
 
-Currently watched: `KXFED` `KXCPI` `KXBTCD` `KXETHD` `KXNASDAQ100` `KXINX`
-`KXRECSSNBER` `KXU3EOY` — ~86 markets survive the liquidity filter.
+### Per-series thresholds
 
-`KXBTCD` alone is the exchange's #3 series by volume (~1.4M/24h).
+Top-level `thresholds` are defaults; **any series can override any of them**.
+
+This is not a convenience — sports and macro genuinely cannot share one setting.
+A 10¢ move is real news on a Fed contract that trades all day. On an NFL
+moneyline during a live game it is just the third quarter happening. Likewise
+crossing 50¢ means the market *inverted* on a macro contract, but a football
+favourite crosses it routinely, so football sets `no_flip`.
+
+| Group | Series | min vol | move | FLIP | VOLUME |
+|---|---|---|---|---|---|
+| Macro / crypto | `KXFED` `KXCPI` `KXBTCD` `KXETHD` `KXNASDAQ100` `KXINX` `KXRECSSNBER` `KXU3EOY` | 500 | 10¢ | ✅ | ✅ |
+| Football | `KXNFLGAME` `KXNFLSPREAD` `KXNCAAFGAME` `KXNCAAFSPREAD` `KXNCAAFTOTAL` | 5,000 | 25¢ | ❌ | ❌ |
+
+~200 markets survive the filters out of ~4,200 open. `KXBTCD` is the exchange's
+#3 series by volume (~1.5M/24h); MLB and tennis are larger still but are
+deliberately not watched.
+
+Verified by fault injection: a 20¢ NFL move stays silent while a 12¢ macro move
+alerts; an NFL market crossing 50¢ stays silent while a macro market crossing
+50¢ fires a FLIP.
 
 ## Commands
 
