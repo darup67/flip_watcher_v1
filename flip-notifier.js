@@ -80,6 +80,13 @@ const BURST_BUDGET_MS = Number(process.env.FLIP_BURST_BUDGET_MS) || 50000;  // n
 const READ_ATTEMPTS = 4;
 const READ_BACKOFF_MS = 2500;
 
+// Zombie recovery: when the study is on the chart but stuck in a restart loop,
+// producing no table output. Reloading the page forces TradingView to re-init
+// all studies from the saved chart state, which clears runtime glitches.
+const ZOMBIE_AFTER = 10;              // consecutive failures before attempting recovery
+const ZOMBIE_COOLDOWN_MS = 10 * 60 * 1000;  // never reload more than once per 10 min
+const ZOMBIE_MAX_ATTEMPTS = 3;        // give up and escalate after this many reloads
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function secondsSinceBoundary() {
@@ -341,6 +348,155 @@ function cdpEvalOn(page, expression) {
     });
     ws.on('error', err => { clearTimeout(timer); reject(err); });
   });
+}
+
+/* ------------------------------------------------------------------ *
+ * Zombie recovery: detect a stuck study and reload the page
+ * ------------------------------------------------------------------ */
+
+/**
+ * Check whether the Flip Scanner study is on the chart but stuck (zombie).
+ * A zombie study shows up in dataSources but never reaches status type 1
+ * (completed), so it produces no table output.
+ */
+const ZOMBIE_CHECK_JS = `
+(function() {
+  try {
+    var chart = window.TradingViewApi._activeChartWidgetWV.value()._chartWidget;
+    var sources = chart.model().model().dataSources();
+    for (var i = 0; i < sources.length; i++) {
+      var s = sources[i];
+      if (!s.metaInfo) continue;
+      var meta = s.metaInfo();
+      var name = meta.description || meta.shortDescription || '';
+      if (name.indexOf('Flip') === -1) continue;
+      var status = s.status ? s.status() : null;
+      return {
+        found: true,
+        name: name,
+        statusType: status ? status.type : -1,
+        isStarted: !!s._isStarted,
+        restarting: !!s._restarting,
+        wasCompletedBefore: !!s._wasCompletedBefore,
+        isZombie: !!status && status.type !== 1
+      };
+    }
+    return { found: false };
+  } catch(e) { return { error: e.message }; }
+})()`;
+
+/**
+ * Reload the TradingView chart page via CDP. The chart state is auto-saved to
+ * the cloud, so a reload re-initializes all studies cleanly from scratch,
+ * breaking any runtime glitches (stuck restart loops, collapsed panes, etc.)
+ * without losing the user's symbol inputs or layout.
+ */
+async function cdpReload() {
+  const res = await fetch(`http://${CDP_HOST}/json/list`, {
+    signal: AbortSignal.timeout(CDP_TIMEOUT_MS),
+  });
+  const targets = await res.json();
+  const page = targets.find(t => t.type === 'page' && (t.url || '').includes('/chart/'));
+  if (!page) throw new Error('no chart tab to reload');
+
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(page.webSocketDebuggerUrl, { perMessageDeflate: false });
+    const timer = setTimeout(() => {
+      try { ws.close(); } catch {}
+      reject(new Error('reload timed out'));
+    }, 10000);
+    ws.on('open', () => {
+      ws.send(JSON.stringify({ id: 1, method: 'Page.reload', params: {} }));
+    });
+    ws.on('message', raw => {
+      let msg;
+      try { msg = JSON.parse(raw.toString()); } catch { return; }
+      if (msg.id !== 1) return;
+      clearTimeout(timer);
+      try { ws.close(); } catch {}
+      if (msg.error) reject(new Error(msg.error.message));
+      else resolve();
+    });
+    ws.on('error', e => { clearTimeout(timer); reject(e); });
+  });
+}
+
+/**
+ * Called when we have had ZOMBIE_AFTER consecutive failures reading the scanner
+ * table. Checks if the study is actually on the chart but stuck, and if so,
+ * reloads the page to force a clean re-initialization.
+ *
+ * Returns true if a recovery was attempted, false if skipped.
+ */
+async function attemptZombieRecovery() {
+  const prev = loadState() || {};
+  const now = Date.now();
+
+  // Cooldown: don't reload more than once per ZOMBIE_COOLDOWN_MS
+  if (prev.lastZombieRecovery &&
+      now - new Date(prev.lastZombieRecovery).getTime() < ZOMBIE_COOLDOWN_MS) {
+    return false;
+  }
+
+  // Max attempts: don't keep reloading forever
+  const attempts = (prev.zombieAttempts || 0) + 1;
+  if (attempts > ZOMBIE_MAX_ATTEMPTS) {
+    if (!prev.zombieGaveUp) {
+      log(`ZOMBIE recovery exhausted (${ZOMBIE_MAX_ATTEMPTS} reloads) — manual fix needed`);
+      await notify('🧟 Flip Scanner zombie — manual fix needed',
+        `Scanner stuck after ${ZOMBIE_MAX_ATTEMPTS} page reloads. Open TradingView, remove the Scanner study, ` +
+        'open Pine Editor → "Watchlist Flip Scanner" → Add to chart, then set timeframe to 30.',
+        { sound: 'Basso', speak: 'Flip scanner is stuck. Manual intervention required.' });
+      writeAtomic(STATE_FILE, JSON.stringify({ ...prev, zombieGaveUp: true }, null, 2));
+    }
+    return false;
+  }
+
+  // Check if the study is actually on the chart (zombie = present but not rendering)
+  let check;
+  try {
+    check = await cdpEvaluate(ZOMBIE_CHECK_JS, v => v && !v.error);
+  } catch (e) {
+    log(`ZOMBIE detection failed (CDP error): ${e.message}`);
+    return false;
+  }
+
+  if (!check || check.error) {
+    log(`ZOMBIE detection failed: ${check?.error || 'no response'}`);
+    return false;
+  }
+
+  if (!check.found) {
+    // Study is genuinely missing from the chart — a reload won't help
+    log('ZOMBIE check: study not on chart — reload would not help');
+    return false;
+  }
+
+  // Study is on the chart but not producing output → zombie confirmed
+  log(`ZOMBIE confirmed: ${check.name} · status=${check.statusType} ` +
+      `started=${check.isStarted} restarting=${check.restarting} ` +
+      `(attempt ${attempts}/${ZOMBIE_MAX_ATTEMPTS}) — reloading page`);
+
+  try {
+    await cdpReload();
+  } catch (e) {
+    log(`ZOMBIE page reload failed: ${e.message}`);
+    return false;
+  }
+
+  // Mark the recovery attempt. Set settleUntil so the next poll re-baselines
+  // instead of judging flips on potentially stale data.
+  writeAtomic(STATE_FILE, JSON.stringify({
+    ...prev,
+    lastZombieRecovery: new Date().toISOString(),
+    zombieAttempts: attempts,
+    zombieGaveUp: false,
+    // 90s settle: TradingView takes ~30-60s to fully reload + reconnect feeds
+    settleUntil: now + 90 * 1000,
+  }, null, 2));
+
+  log('page reload sent — settling for 90s before next read');
+  return true;
 }
 
 /**
@@ -661,15 +817,37 @@ async function recordFailure(reason) {
       { sound: 'Basso', speak: 'Warning. Flip watcher is not reading the chart.' });
     log(`ALERTED: blind for ${failures} polls — ${reason}`);
   }
+
+  // Zombie auto-recovery: if the scanner table is consistently missing and the
+  // study is still attached to the chart, it is stuck in a runtime glitch.
+  // Reloading the page forces TradingView to re-init from saved state.
+  if (failures >= ZOMBIE_AFTER && reason.includes('scanner table not found') && !wasDown) {
+    const recovered = await attemptZombieRecovery();
+    if (recovered) log('ZOMBIE recovery attempted — next poll will verify');
+  }
+
   process.exitCode = 1;
 }
 
 async function recordRecovery() {
   const prev = loadState() || {};
   if (prev.blindAlerted) {
-    await notify('✅ Flip Watcher recovered', 'Reading the chart again',
+    const wasZombie = (prev.zombieAttempts || 0) > 0;
+    const detail = wasZombie
+      ? `Recovered after ${prev.zombieAttempts} zombie recovery reload(s)`
+      : 'Reading the chart again';
+    await notify('✅ Flip Watcher recovered', detail,
       { sound: 'Glass', speak: 'Flip watcher is reading the chart again.' });
-    log('ALERTED: recovered');
+    log(`ALERTED: recovered${wasZombie ? ` (zombie cleared after ${prev.zombieAttempts} reload(s))` : ''}`);
+  }
+  // Clear zombie tracking on successful read — the incident is over.
+  if (prev.zombieAttempts || prev.zombieGaveUp) {
+    writeAtomic(STATE_FILE, JSON.stringify({
+      ...prev,
+      zombieAttempts: 0,
+      zombieGaveUp: false,
+      lastZombieRecovery: null,
+    }, null, 2));
   }
 }
 
