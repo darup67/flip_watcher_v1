@@ -1,4 +1,4 @@
-# Flip Watcher App 📈📉🤑
+# Flip Watcher App (Kalshi + TradingView) 📈📉🤑
 
 Flip Watcher App — v1 — Buy/Sell Signals
 
