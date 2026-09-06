@@ -1,4 +1,4 @@
-# Flip Notifier 📈📉🤑
+# Flip Watcher App 📈📉🤑
 
 Flip Watcher App — v1 — Buy/Sell Signals
 
