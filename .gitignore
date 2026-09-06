@@ -16,3 +16,4 @@ node_modules/
 # Never commit key material
 *.p8
 *.pem
+dashboard-preview.html
