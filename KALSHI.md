@@ -24,10 +24,58 @@ need API-key auth, which this deliberately does not hold.
 | 🔄 **FLIP** | YES mid crosses 50¢ | The market's majority belief inverted |
 | 📈 **MOVE** | YES mid jumps ≥ `move_cents` since last poll | Sharp repricing |
 | 📊 **VOLUME** | 24h volume multiplies by ≥ `vol_spike_x` | Unusual activity |
+| ⬆️ **LADDER** | 2+ of the above land on one event ticker | A whole strike curve repriced — see below |
 
 One signal per market per poll, in that priority order — a market that flips
 does not also report the move that carried it across. Thresholds are
 **per-series**; football suppresses FLIP and VOLUME entirely (see below).
+
+## Strike-ladder collapse
+
+A series like `KXBTCD` is a **ladder**: 50+ contracts on one underlying at $100
+increments. Move BTC $200 and every strike near the money reprices at once — so
+one fact ("BTC is chopping around $79.7K") arrived as a dozen alerts, and the
+same strike re-fired each time price oscillated back across it.
+
+Measured over one afternoon before the fix:
+
+- **124 individual signals** across 38 alert events
+- **74%** of them Bitcoin
+- one alert carried **11 markets** at once
+- the `$79,700` strike alone fired **15 times**
+
+Signals are now grouped by Kalshi's own **event ticker** — one underlying at one
+expiry, which is exactly the set of strikes that reprice together. Two or more
+signals on one event collapse into a single `LADDER` signal:
+
+```
+⬆️ Bitcoin price on Sep 11, 2026 — 6 strikes $79,500–$82,000, up to 20¢  🔥 STRONG
+  KXBTCD · Bitcoin daily
+  · band moved up to 20¢
+  · liquid (72,135 24h vol)
+  · 6 strikes repriced together
+  folded:
+    $79,500 or above  34¢→54¢
+    $80,000 or above  27¢→47¢
+    …
+```
+
+**Nothing is lost.** The member count, strike band and largest move survive into
+the summary, every folded strike is listed underneath, and the per-market rows
+are still in `kalshi-alerts.tsv`. The log reports the reduction:
+`· 7 signals folded to 2`.
+
+A ladder is scored on the *group*: magnitude from the largest member move,
+liquidity from the **summed** volume, and breadth (`n` strikes) as the
+correlation factor — a whole curve repricing is a stronger statement than one
+strike twitching. Mixed-direction groups render `↕️` and flag "strikes
+diverged", which is itself worth seeing.
+
+Single-signal events pass through untouched, so a lone macro move is never
+disguised as a ladder.
+
+Verified: 6 near-money BTC strikes + 1 isolated recession move → `7 signals
+folded to 2` (one LADDER, one standalone); a 3-up/3-down group renders mixed.
 
 ## Setup quality scoring
 

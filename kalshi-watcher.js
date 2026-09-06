@@ -280,12 +280,33 @@ const vol24 = m => money(m.volume_24h_fp);
  * that reads badly mid-sentence.
  */
 function marketName(m) {
+  const { base, strike } = marketParts(m);
+  return strike ? `${base}: ${strike}` : base;
+}
+
+/**
+ * Split a market's name into the part shared across a strike ladder ("Bitcoin
+ * price on Sep 6, 2026") and the strike that distinguishes it ("$79,800 or
+ * above"). The ladder collapse groups on the first and summarises the second.
+ */
+function marketParts(m) {
   const title = String(m.title || '').replace(/\?\s*$/, '').trim();
   const sub = String(m.yes_sub_title || m.subtitle || '').trim();
-  if (!title) return sub || m.ticker;
-  if (!sub || sub.toLowerCase() === title.toLowerCase()) return title;
-  return `${title}: ${sub}`;
+  if (!title) return { base: sub || m.ticker, strike: '' };
+  if (!sub || sub.toLowerCase() === title.toLowerCase()) return { base: title, strike: '' };
+  return { base: title, strike: sub };
 }
+
+/** Numeric strike, for describing the band a ladder move covered. */
+function strikeValue(strike) {
+  const m = /\$?([\d,]+(?:\.\d+)?)/.exec(String(strike || ''));
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
+}
+
+const fmtStrike = n =>
+  n >= 1000 ? `$${Math.round(n).toLocaleString()}` : `$${n}`;
 
 /** Fetch every open market for one series, following pagination. */
 async function fetchSeries(seriesTicker) {
@@ -424,7 +445,14 @@ function scoreSignal(sig, allSignals, globalTh) {
   let score = 0;
 
   // 1. Magnitude
-  if (sig.type === 'FLIP') {
+  if (sig.type === 'LADDER') {
+    // A whole curve repricing is a stronger statement than one strike twitching,
+    // so judge on the largest member move and let breadth count below.
+    if (sig.maxDelta >= th.move_cents * 2) { score += 2; factors.push(`band moved up to ${sig.maxDelta.toFixed(0)}¢`); }
+    else if (sig.maxDelta > 0) { score += 1; factors.push(`band moved up to ${sig.maxDelta.toFixed(0)}¢`); }
+    else { score += 1; factors.push(`${sig.kinds.join('+').toLowerCase()} across the band`); }
+    if (sig.mixed) factors.push('mixed direction — strikes diverged');
+  } else if (sig.type === 'FLIP') {
     const dist = Math.abs(sig.to - 50);
     if (dist >= 10) { score += 2; factors.push(`decisive cross (now ${sig.to.toFixed(0)}¢)`); }
     else if (dist >= 4) { score += 1; factors.push(`crossed 50¢ (now ${sig.to.toFixed(0)}¢)`); }
@@ -444,20 +472,99 @@ function scoreSignal(sig, allSignals, globalTh) {
   else if (v >= th.min_volume_24h * 4) { score += 1; factors.push(`decent volume (${v.toLocaleString()})`); }
   else { factors.push(`thin (${v.toLocaleString()} 24h vol)`); }
 
-  // 3. Correlation — siblings in the same series moving together means the
-  // whole curve repriced, not one strike wobbling.
-  const siblings = allSignals.filter(s => s.series === sig.series && s.ticker !== sig.ticker);
-  if (siblings.length >= 2) { score += 1; factors.push(`${siblings.length + 1} markets in ${sig.series} moved`); }
-  else if (siblings.length === 1) { factors.push(`1 sibling market also moved`); }
-  else { factors.push('isolated'); }
+  // 3. Correlation — the whole curve repricing beats one strike wobbling.
+  // For a collapsed ladder that breadth is already the member count.
+  if (sig.type === 'LADDER') {
+    if (sig.n >= 4) { score += 1; factors.push(`${sig.n} strikes repriced together`); }
+    else { factors.push(`${sig.n} strikes repriced`); }
+  } else {
+    const siblings = allSignals.filter(s => s.series === sig.series && s.ticker !== sig.ticker);
+    if (siblings.length >= 2) { score += 1; factors.push(`${siblings.length + 1} markets in ${sig.series} moved`); }
+    else if (siblings.length === 1) { factors.push(`1 sibling market also moved`); }
+    else { factors.push('isolated'); }
+  }
 
   const label = score >= 4 ? 'STRONG' : score >= 2 ? 'MODERATE' : 'WEAK';
   return { score, label, factors };
 }
 
+/* ------------------------------------------------------------------ *
+ * Strike-ladder collapse
+ *
+ * A series like KXBTCD is a ladder: 50+ contracts on one underlying at $100
+ * increments. Move BTC $200 and every strike near the money reprices at once,
+ * so one fact — "BTC is chopping around 79.7k" — arrives as a dozen alerts,
+ * and the same strike re-fires each time price oscillates back across it.
+ * Measured over one afternoon: 124 individual signals, 74% of them Bitcoin,
+ * one alert carrying 11 markets, the $79,700 strike alone firing 15 times.
+ *
+ * Grouping on the event ticker (one underlying at one expiry) collapses that
+ * into a single signal describing the band that moved. Nothing is lost: the
+ * member count, strike range and largest move all survive into the summary,
+ * and the per-market rows are still in kalshi-alerts.tsv.
+ * ------------------------------------------------------------------ */
+
+const LADDER_MIN = 2;   // 2+ signals on one event collapse into one
+
+function collapseLadders(signals) {
+  const byEvent = new Map();
+  for (const s of signals) {
+    if (!byEvent.has(s.event)) byEvent.set(s.event, []);
+    byEvent.get(s.event).push(s);
+  }
+
+  const out = [];
+  for (const [event, group] of byEvent) {
+    if (group.length < LADDER_MIN) { out.push(...group); continue; }
+
+    const deltas = group.map(g => g.delta).filter(d => typeof d === 'number');
+    const ups = deltas.filter(d => d > 0).length;
+    const downs = deltas.filter(d => d < 0).length;
+    const dir = ups > downs ? 1 : downs > ups ? -1 : 0;
+
+    const vals = group.map(g => strikeValue(g.strike)).filter(v => v !== null);
+    const band = vals.length
+      ? { lo: Math.min(...vals), hi: Math.max(...vals) }
+      : null;
+
+    const absDeltas = deltas.map(Math.abs);
+    out.push({
+      type: 'LADDER',
+      event,
+      series: group[0].series,
+      label: group[0].label,
+      base: group[0].base,
+      title: group[0].base,
+      th: group[0].th,
+      n: group.length,
+      dir,
+      band,
+      mixed: ups > 0 && downs > 0,
+      avgDelta: absDeltas.length ? absDeltas.reduce((a, b) => a + b, 0) / absDeltas.length : 0,
+      maxDelta: absDeltas.length ? Math.max(...absDeltas) : 0,
+      // The group's liquidity is what makes the move meaningful, so score on
+      // the total rather than on whichever single strike happened to be first.
+      volume: group.reduce((a, g) => a + (g.volume || 0), 0),
+      kinds: [...new Set(group.map(g => g.type))],
+      members: group,
+    });
+  }
+  return out;
+}
+
 const SIG_ICON = { FLIP: '🔄', MOVE: '📈', VOLUME: '📊' };
 
 function sigHeadline(s) {
+  if (s.type === 'LADDER') {
+    const arrow = s.mixed ? '↕️' : s.dir > 0 ? '⬆️' : s.dir < 0 ? '⬇️' : '📊';
+    const bandTxt = s.band
+      ? (s.band.lo === s.band.hi
+          ? ` ${fmtStrike(s.band.lo)}`
+          : ` ${fmtStrike(s.band.lo)}–${fmtStrike(s.band.hi)}`)
+      : '';
+    const mag = s.maxDelta ? `, up to ${s.maxDelta.toFixed(0)}¢` : '';
+    return `${arrow} ${s.base} — ${s.n} strikes${bandTxt}${mag}`;
+  }
   if (s.type === 'FLIP') {
     const dir = s.to >= 50 ? 'YES' : 'NO';
     return `🔄 ${s.title} → ${dir} (${s.from.toFixed(0)}¢→${s.to.toFixed(0)}¢)`;
@@ -578,11 +685,17 @@ async function main() {
     const v = vol24(m);
     const mth = m._th || th;
     if (v < mth.min_volume_24h && !pinned.has(m.ticker)) continue;
+    const parts = marketParts(m);
     tracked.push({
       ticker: m.ticker,
       series: m._series,
       label: m._label,
       title: marketName(m),
+      base: parts.base,
+      strike: parts.strike,
+      // Kalshi's own grouping: one event = one underlying at one expiry, which
+      // is exactly the set of strikes that reprice together.
+      event: m.event_ticker || m.ticker,
       mid,
       volume: v,
       close: m.close_time,
@@ -702,7 +815,9 @@ async function main() {
     return;
   }
 
-  const scored = signals.map(s => ({ ...s, setup: scoreSignal(s, signals, th) }));
+  // Collapse strike ladders before scoring, so one repricing curve is one alert.
+  const collapsed = collapseLadders(signals);
+  const scored = collapsed.map(s => ({ ...s, setup: scoreSignal(s, collapsed, th) }));
   scored.sort((a, b) => b.setup.score - a.setup.score);
 
   // Title is the only text that renders on this Mac (previews are off), so it
@@ -713,22 +828,42 @@ async function main() {
 
   const body = scored.map(s => {
     const e = SCORE_EMOJI[s.setup.label];
-    return `${sigHeadline(s)}  ${e} ${s.setup.label}\n` +
-           `  ${s.series} · ${s.label}\n` +
-           s.setup.factors.map(f => `  · ${f}`).join('\n');
+    let block = `${sigHeadline(s)}  ${e} ${s.setup.label}\n` +
+                `  ${s.series} · ${s.label}\n` +
+                s.setup.factors.map(f => `  · ${f}`).join('\n');
+    // Name the strikes a collapse folded away, so the summary is auditable
+    // without opening the TSV.
+    if (s.type === 'LADDER') {
+      const lines = s.members
+        .slice()
+        .sort((a, b) => (strikeValue(a.strike) ?? 0) - (strikeValue(b.strike) ?? 0))
+        .map(m => `    ${m.strike || m.ticker}  ${m.from?.toFixed(0)}¢→${m.to?.toFixed(0)}¢` +
+                  (m.type === 'VOLUME' ? `  (vol ${m.mult?.toFixed(1)}x)` : ''));
+      block += `\n  folded:\n${lines.join('\n')}`;
+    }
+    return block;
   }).join('\n\n');
 
-  const spoken = `Kalshi. ${scored.slice(0, 3).map(s =>
-    s.type === 'FLIP' ? `${s.label} flipped to ${s.to >= 50 ? 'yes' : 'no'}`
-                      : `${s.label} moved ${Math.abs(s.delta ?? 0).toFixed(0)} cents`
-  ).join(', ')}. ${top.setup.label.toLowerCase()} setup.`;
+  const spoken = `Kalshi. ${scored.slice(0, 3).map(s => {
+    if (s.type === 'LADDER') {
+      const d = s.mixed ? 'diverged' : s.dir > 0 ? 'up' : s.dir < 0 ? 'down' : 'repriced';
+      return `${s.label}, ${s.n} strikes ${d} up to ${s.maxDelta.toFixed(0)} cents`;
+    }
+    if (s.type === 'FLIP') return `${s.label} flipped to ${s.to >= 50 ? 'yes' : 'no'}`;
+    if (s.type === 'VOLUME') return `${s.label} volume ${s.mult?.toFixed(1)} times`;
+    return `${s.label} moved ${Math.abs(s.delta ?? 0).toFixed(0)} cents`;
+  }).join(', ')}. ${top.setup.label.toLowerCase()} setup.`;
 
   await notify(title, body, { sound: 'Submarine', speak: spoken });
   // Name the muted channels on every alert. A silenced watcher and a broken one
   // look identical in the log otherwise, and that ambiguity is the whole thing
   // this stack exists to avoid.
+  const folded = signals.length - collapsed.length;
   log(`ALERTED${muted.length ? ` (${muted.join('+')} muted)` : ''}: ` +
-      scored.map(s => `${s.ticker} ${s.type} [${s.setup.label}:${s.setup.score}]`).join(', '));
+      scored.map(s => s.type === 'LADDER'
+        ? `${s.event} LADDER×${s.n} [${s.setup.label}:${s.setup.score}]`
+        : `${s.ticker} ${s.type} [${s.setup.label}:${s.setup.score}]`).join(', ') +
+      (folded > 0 ? ` · ${signals.length} signals folded to ${collapsed.length}` : ''));
 }
 
 /* ------------------------------------------------------------------ *
