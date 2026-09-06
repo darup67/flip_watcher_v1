@@ -89,6 +89,24 @@ const ZOMBIE_MAX_ATTEMPTS = 3;        // give up and escalate after this many re
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/* ------------------------------------------------------------------ *
+ * Graceful shutdown — launchd sends SIGTERM before SIGKILL. Catching it
+ * releases the lock and closes any open CDP connection immediately,
+ * instead of relying on stale-lock detection on the next tick.
+ * ------------------------------------------------------------------ */
+let shuttingDown = false;
+function onShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  log(`${signal} received — cleaning up`);
+  releaseLock();
+  // Close any cached CDP WebSocket
+  if (_cachedWs) { try { _cachedWs.close(); } catch {} _cachedWs = null; }
+  process.exit(0);
+}
+process.on('SIGTERM', () => onShutdown('SIGTERM'));
+process.on('SIGINT',  () => onShutdown('SIGINT'));
+
 function secondsSinceBoundary() {
   const n = new Date();
   return (n.getMinutes() % BAR_MIN) * 60 + n.getSeconds();
@@ -295,24 +313,92 @@ const EXTRACT_JS = `
 })()
 `;
 
-/**
- * Evaluate against EVERY open chart tab and keep the first result that actually
- * answers. Taking targets[0] blindly meant a second chart tab without the study
- * on it could shadow the real one and blind the watcher permanently.
- */
-async function cdpEvaluate(expression, isUseful = null) {
+/* ------------------------------------------------------------------ *
+ * CDP target-list cache — during a burst we poll up to 50 times per
+ * launchd tick. Hitting /json/list each time adds ~50 HTTP round trips
+ * of pure overhead. Cache the result for a short window.
+ * ------------------------------------------------------------------ */
+let _cdpTargetsCache = null;
+let _cdpTargetsCacheAt = 0;
+const CDP_TARGET_CACHE_MS = 5000;   // 5s — plenty for burst, short enough to catch tab changes
+
+async function cdpGetPages() {
+  const now = Date.now();
+  if (_cdpTargetsCache && now - _cdpTargetsCacheAt < CDP_TARGET_CACHE_MS) {
+    return _cdpTargetsCache;
+  }
   const res = await fetch(`http://${CDP_HOST}/json/list`, {
     signal: AbortSignal.timeout(CDP_TIMEOUT_MS),
   });
   const targets = await res.json();
   const pages = targets.filter(t => t.type === 'page' && (t.url || '').includes('/chart/'));
   if (!pages.length) throw new Error('no TradingView chart tab found on CDP :9222');
+  _cdpTargetsCache = pages;
+  _cdpTargetsCacheAt = now;
+  return pages;
+}
+
+/** Invalidate the target cache (called after page reload, or on connection error). */
+function cdpInvalidateCache() {
+  _cdpTargetsCache = null;
+  _cdpTargetsCacheAt = 0;
+  // Also close any cached WebSocket — the page it connects to may be gone.
+  if (_cachedWs) { try { _cachedWs.close(); } catch {} _cachedWs = null; }
+}
+
+/* ------------------------------------------------------------------ *
+ * CDP WebSocket connection cache — reuse a single WebSocket across
+ * burst polls instead of opening and closing one per evaluation.
+ * Falls back to a fresh connection if the cached one is dead.
+ * ------------------------------------------------------------------ */
+let _cachedWs = null;
+let _cachedWsUrl = null;
+let _cdpMsgId = 0;
+
+function getCachedWs(wsUrl) {
+  if (_cachedWs && _cachedWsUrl === wsUrl && _cachedWs.readyState === WebSocket.OPEN) {
+    return _cachedWs;
+  }
+  // Close stale one
+  if (_cachedWs) { try { _cachedWs.close(); } catch {} }
+  _cachedWs = null;
+  _cachedWsUrl = null;
+  return null;
+}
+
+function createCachedWs(wsUrl) {
+  const ws = new WebSocket(wsUrl, { perMessageDeflate: false });
+  _cachedWs = ws;
+  _cachedWsUrl = wsUrl;
+  // If the connection drops unexpectedly, clear the cache so the next poll
+  // creates a fresh one instead of sending into a dead socket.
+  ws.on('close', () => { if (_cachedWs === ws) { _cachedWs = null; _cachedWsUrl = null; } });
+  ws.on('error', () => { if (_cachedWs === ws) { _cachedWs = null; _cachedWsUrl = null; } });
+  return ws;
+}
+
+/**
+ * Evaluate against EVERY open chart tab and keep the first result that actually
+ * answers. Taking targets[0] blindly meant a second chart tab without the study
+ * on it could shadow the real one and blind the watcher permanently.
+ */
+async function cdpEvaluate(expression, isUseful = null) {
+  const pages = await cdpGetPages();
 
   let lastErr = null, firstResult;
   for (const page of pages) {
     let value;
     try { value = await cdpEvalOn(page, expression); }
-    catch (e) { lastErr = e; continue; }
+    catch (e) {
+      lastErr = e;
+      // Connection-level failures invalidate the cache — the target may have
+      // reloaded and gotten a new WebSocket URL.
+      if (e.message.includes('timed out') || e.message.includes('ECONNREFUSED') ||
+          e.message.includes('not opened') || e.message.includes('close')) {
+        cdpInvalidateCache();
+      }
+      continue;
+    }
     if (firstResult === undefined) firstResult = value;
     if (!isUseful || isUseful(value)) return value;
   }
@@ -322,31 +408,60 @@ async function cdpEvaluate(expression, isUseful = null) {
 
 function cdpEvalOn(page, expression) {
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(page.webSocketDebuggerUrl, { perMessageDeflate: false });
-    const timer = setTimeout(() => {
-      try { ws.close(); } catch {}
-      reject(new Error('CDP evaluate timed out'));
-    }, CDP_TIMEOUT_MS);
+    const wsUrl = page.webSocketDebuggerUrl;
+    let ws = getCachedWs(wsUrl);
+    const isNew = !ws;
+    if (!ws) ws = createCachedWs(wsUrl);
 
-    ws.on('open', () => {
-      ws.send(JSON.stringify({
-        id: 1,
-        method: 'Runtime.evaluate',
-        params: { expression, returnByValue: true, awaitPromise: false },
-      }));
-    });
-    ws.on('message', raw => {
+    const msgId = ++_cdpMsgId;
+    let settled = false;
+    const settle = fn => (...args) => { if (!settled) { settled = true; clearTimeout(timer); fn(...args); } };
+
+    const timer = setTimeout(settle(err => {
+      // Don't close a cached connection on timeout — it may recover for the
+      // next call. But DO reject this evaluation.
+      reject(new Error('CDP evaluate timed out'));
+    }), CDP_TIMEOUT_MS);
+
+    function onMessage(raw) {
       let msg;
       try { msg = JSON.parse(raw.toString()); } catch { return; }
-      if (msg.id !== 1) return;
-      clearTimeout(timer);
-      try { ws.close(); } catch {}
+      if (msg.id !== msgId) return;
+      ws.removeListener('message', onMessage);
+      ws.removeListener('close', onClose);
+      settle(() => {})(/* clear timer */);
       if (msg.error) return reject(new Error(msg.error.message));
       const r = msg.result?.result;
       if (r?.subtype === 'error') return reject(new Error(r.description || 'page threw'));
       resolve(r?.value);
-    });
-    ws.on('error', err => { clearTimeout(timer); reject(err); });
+    }
+
+    // If the WebSocket closes while we're waiting for a response, fail fast
+    // instead of waiting for the full 10s timeout.
+    function onClose(code) {
+      ws.removeListener('message', onMessage);
+      settle(err => reject(err))(new Error(`CDP WebSocket closed (code ${code}) before response`));
+    }
+
+    ws.on('message', onMessage);
+    ws.on('close', onClose);
+
+    const sendEval = () => {
+      ws.send(JSON.stringify({
+        id: msgId,
+        method: 'Runtime.evaluate',
+        params: { expression, returnByValue: true, awaitPromise: false },
+      }));
+    };
+
+    if (isNew) {
+      // Need to wait for open before sending
+      ws.once('open', sendEval);
+      // Handle connection failure for brand-new sockets
+      ws.once('error', settle(err => reject(err)));
+    } else {
+      sendEval();
+    }
   });
 }
 
@@ -392,12 +507,14 @@ const ZOMBIE_CHECK_JS = `
  * without losing the user's symbol inputs or layout.
  */
 async function cdpReload() {
-  const res = await fetch(`http://${CDP_HOST}/json/list`, {
-    signal: AbortSignal.timeout(CDP_TIMEOUT_MS),
-  });
-  const targets = await res.json();
-  const page = targets.find(t => t.type === 'page' && (t.url || '').includes('/chart/'));
+  const pages = await cdpGetPages();
+  const page = pages[0];   // already filtered to chart tabs
   if (!page) throw new Error('no chart tab to reload');
+
+  // A reload invalidates the page's WebSocket endpoint — the old one dies and
+  // a new one is assigned. Close the cached connection BEFORE reloading so
+  // subsequent polls don't send into a dead socket.
+  cdpInvalidateCache();
 
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(page.webSocketDebuggerUrl, { perMessageDeflate: false });
@@ -417,6 +534,7 @@ async function cdpReload() {
       if (msg.error) reject(new Error(msg.error.message));
       else resolve();
     });
+    ws.on('close', () => { clearTimeout(timer); });
     ws.on('error', e => { clearTimeout(timer); reject(e); });
   });
 }
@@ -1101,8 +1219,11 @@ async function cycleRunner() {
   if (ONE_SHOT) return;
   while (inBurstWindow() && Date.now() - started < BURST_BUDGET_MS) {
     await sleep(BURST_MS);
+    if (shuttingDown) break;
     await main();
   }
+  // Close the cached WebSocket — no point keeping it open between launchd ticks.
+  if (_cachedWs) { try { _cachedWs.close(); } catch {} _cachedWs = null; }
 }
 
 cycleRunner()
