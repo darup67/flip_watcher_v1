@@ -2,6 +2,10 @@
 
 How the pieces fit, what each one can fail at, and what catches that failure.
 
+> **Sibling watcher:** [`KALSHI.md`](KALSHI.md) documents `kalshi-watcher.js`,
+> which applies this same architecture to Kalshi prediction markets. Separate
+> poller, state, and log; shared alert channels and `send-email.js`.
+
 ```
 TradingView Desktop  (must be running, CDP port 9222)
         │
