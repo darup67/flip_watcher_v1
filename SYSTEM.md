@@ -31,6 +31,7 @@ healthcheck.js       ← scheduled task flip-watcher-daily-health, weekdays 08:3
 | Study removed from chart | no table | notifier → "blind" alert; daily check |
 | Study attached but dead (zombie) | table empty, study stuck in restart loop | notifier → auto-reload after 5 failures (~5 min, up to 3 attempts); daily check --repair also reloads |
 | LaunchAgent unloaded | no polls at all | daily check (`polling has stopped`) — the notifier cannot catch this, it isn't running |
+| Kalshi watcher breaks | no prediction-market signals | daily check — 5 `Kalshi *` rows; see [`KALSHI.md`](KALSHI.md) |
 | Chart symbol changed | nothing — by design | n/a, `tf` is pinned to 30m and symbols are explicit |
 | Notification previews off | body text hidden | handled: flip text lives in the title |
 | Sound muted / wrong output | silent alerts | **nothing catches this** — see Known gaps |
