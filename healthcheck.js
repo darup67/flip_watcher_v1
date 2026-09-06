@@ -600,7 +600,10 @@ function checkKalshiLog() {
     return !Number.isNaN(ts) && ts > cutoff;
   });
   const fails = recent.filter(l => /FAIL|ERROR|FATAL/.test(l)).length;
-  const alerts = recent.filter(l => l.includes('ALERTED:')).length;
+  // Match ALERTED with or without its channel annotation — muting rewrites the
+  // line as "ALERTED (email muted):", and an over-literal "ALERTED:" silently
+  // stopped counting every alert the moment a channel was muted.
+  const alerts = recent.filter(l => /\bALERTED\b/.test(l)).length;
   const size = (statSync(K_LOG_FILE).size / 1024).toFixed(0);
 
   // Same reasoning as the flip watcher's log check: consecutive failures with
@@ -609,7 +612,7 @@ function checkKalshiLog() {
   let lastOkAt = null;
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     const l = lines[i];
-    if (/no signals|ALERTED:|baseline saved|settling/.test(l)) {
+    if (/no signals|\bALERTED\b|baseline saved|settling/.test(l)) {
       lastOkAt = Date.parse(l.slice(0, 24)); break;
     }
     if (/FAIL|ERROR|FATAL/.test(l)) sinceSuccess += 1;
