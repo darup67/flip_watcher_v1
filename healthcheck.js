@@ -31,8 +31,35 @@ const EXPECTED_TF = process.env.FLIP_EXPECTED_TF || '30';  // Scanner's in_2 tim
 
 const checks = [];
 const add = (name, status, detail) => checks.push({ name, status, detail });
+const log = msg => process.stderr.write(`  ${msg}\n`);
 const run = (cmd, a) => new Promise(r =>
   execFile(cmd, a, (e, out) => r({ err: e, out: (out || '').trim() })));
+
+/** CDP JS to detect a zombie study — on the chart but stuck, never reaching status 1 (completed). */
+const ZOMBIE_CHECK = `
+(function() {
+  try {
+    var chart = window.TradingViewApi._activeChartWidgetWV.value()._chartWidget;
+    var sources = chart.model().model().dataSources();
+    for (var i = 0; i < sources.length; i++) {
+      var s = sources[i];
+      if (!s.metaInfo) continue;
+      var meta = s.metaInfo();
+      var name = meta.description || meta.shortDescription || '';
+      if (name.indexOf('Flip') === -1) continue;
+      var status = s.status ? s.status() : null;
+      return {
+        found: true,
+        name: name,
+        statusType: status ? status.type : -1,
+        isStarted: !!s._isStarted,
+        restarting: !!s._restarting,
+        isZombie: !!status && status.type !== 1
+      };
+    }
+    return { found: false };
+  } catch(e) { return { error: e.message }; }
+})()`;
 
 /* -------------------------------------------------- 1. scheduler */
 
@@ -149,7 +176,34 @@ async function checkStudy(page) {
       `study not on chart (present: ${(v?.studies || []).join(', ') || 'none'})`);
     return null;
   }
-  if (!v.flip.cells) { add('Flip Scanner', 'FAIL', 'attached but rendering nothing'); return null; }
+  if (!v.flip.cells) {
+    // Study is on the chart but producing nothing — likely a zombie (stuck in a
+    // restart loop). With --repair, reload the page to force a clean re-init.
+    if (process.argv.includes('--repair')) {
+      let reloaded = false;
+      try {
+        const zombieCheck = await cdpEval(page, ZOMBIE_CHECK);
+        if (zombieCheck?.found) {
+          log(`  zombie detected: status=${zombieCheck.statusType} ` +
+              `started=${zombieCheck.isStarted} restarting=${zombieCheck.restarting}`);
+          // Reload the page — TradingView auto-saves chart state, so everything
+          // comes back, but the runtime glitch is cleared.
+          await cdpEval(page, 'window.location.reload()');
+          reloaded = true;
+          add('Flip Scanner', 'WARN',
+            'was zombie (attached, not rendering) — page reloaded by --repair; ' +
+            're-run healthcheck in ~60s to verify');
+        }
+      } catch (e) {
+        log(`  zombie recovery failed: ${e.message}`);
+      }
+      if (!reloaded) add('Flip Scanner', 'FAIL', 'attached but rendering nothing');
+    } else {
+      add('Flip Scanner', 'FAIL',
+        'attached but rendering nothing — rerun with --repair to attempt auto-recovery');
+    }
+    return null;
+  }
 
   const rows = new Map();
   for (const c of v.flip.data) {

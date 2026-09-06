@@ -25,7 +25,7 @@ healthcheck.js       ← scheduled task flip-watcher-daily-health, weekdays 08:3
 |---|---|---|
 | TradingView closed | no reads | notifier → "blind" alert after 5 polls; daily check |
 | Study removed from chart | no table | notifier → "blind" alert; daily check |
-| Study attached but dead | table empty | notifier → "blind" alert; daily check |
+| Study attached but dead (zombie) | table empty, study stuck in restart loop | notifier → auto-reload after 10 failures (up to 3 attempts); daily check --repair also reloads |
 | LaunchAgent unloaded | no polls at all | daily check (`polling has stopped`) — the notifier cannot catch this, it isn't running |
 | Chart symbol changed | nothing — by design | n/a, `tf` is pinned to 30m and symbols are explicit |
 | Notification previews off | body text hidden | handled: flip text lives in the title |
@@ -44,6 +44,30 @@ is the dangerous failure, so failures are counted rather than ignored:
 Regimes are preserved across an outage, so recovery does not manufacture false flips.
 
 Verified: alerts on #5, stays quiet on #6, recovers cleanly, no phantom flips.
+
+## Zombie auto-recovery
+
+A "zombie" study is attached to the chart but stuck in a runtime restart loop
+(status type 2, `restarting: true`, `isStarted: false`). It produces no table
+output, so the notifier logs "scanner table not found" every poll.
+
+**Notifier** (automatic):
+- After **10 consecutive** "scanner table not found" failures:
+  1. Checks via CDP if the study is on the chart but not completed (zombie).
+  2. If confirmed, reloads the TradingView page (`Page.reload` via CDP).
+  3. TradingView auto-saves chart state, so all studies and inputs survive.
+  4. Sets a 90s settle window, then normal polling resumes.
+- Cooldown: 10 minutes between reload attempts.
+- Max 3 reloads per incident. After 3, sends 🧟 alert for manual intervention.
+- On recovery (first successful read), clears zombie counters and sends ✅ alert.
+
+**Healthcheck** (`--repair`):
+- When it detects "attached but rendering nothing", checks zombie status.
+- If confirmed, reloads the page and reports "reloaded by --repair".
+
+**Root cause**: zombie state was observed after removing and re-adding the study
+programmatically — the study's internal state machine got stuck. A page reload
+clears the runtime glitch because TradingView re-initializes from saved state.
 
 ## Known gaps
 
