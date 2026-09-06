@@ -74,6 +74,28 @@ or crossed book return no price at all and are skipped rather than guessed at.
 }
 ```
 
+### Alert channels
+
+```json
+"alerts": { "banner": true, "sound": true, "speak": true, "email": false }
+```
+
+Any channel can be muted independently. **`kalshi-alerts.tsv` is always
+written** — muting changes where a signal goes, never whether it is recorded,
+or a quiet period becomes a hole in the history you cannot reconstruct.
+
+**Currently muted: `email`.** Kalshi signals reach banner, sound, speech, and
+the TSV, but send no mail. Set `"email": true` to resume.
+
+This is Kalshi-only. The TradingView flip notifier has its own independent
+email path and is unaffected — worth knowing, because email is the one channel
+that survives a closed lid, so a muted Kalshi watcher is effectively silent
+when the lid is shut.
+
+Muting is surfaced in three places so a silenced watcher is never mistaken for
+a broken one: `--status`, every `ALERTED (email muted): …` log line, and the
+health check's `Kalshi watchlist` row. Muting *every* channel is a WARN.
+
 ### Per-series thresholds
 
 Top-level `thresholds` are defaults; **any series can override any of them**.

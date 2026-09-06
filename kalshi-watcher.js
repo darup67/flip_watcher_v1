@@ -130,26 +130,45 @@ const run = (cmd, cmdArgs) => new Promise(resolve => {
     err => resolve(err ? err.message : null));
 });
 
+/**
+ * Which delivery channels are live. Set from the watchlist's `alerts` block
+ * once it loads; until then everything is on, so an early failure alert (a
+ * missing or corrupt watchlist) can still reach you.
+ *
+ * `kalshi-alerts.tsv` is deliberately NOT a channel — it is always written.
+ * Muting a channel should change where a signal goes, never whether it is
+ * recorded, or a quiet period becomes a hole in the history.
+ */
+let channels = { banner: true, sound: true, speak: true, email: true };
+
+const CHANNEL_DEFAULTS = { banner: true, sound: true, speak: true, email: true };
+
 async function notify(title, body, { sound = 'Submarine', speak = null } = {}) {
   const esc = s => String(s)
     .replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '\\n');
 
-  const bannerErr = await run('/usr/bin/osascript',
-    ['-e', `display notification "${esc(body)}" with title "${esc(title)}"`]);
-  if (bannerErr) log(`WARN banner call failed: ${bannerErr}`);
+  if (channels.banner) {
+    const bannerErr = await run('/usr/bin/osascript',
+      ['-e', `display notification "${esc(body)}" with title "${esc(title)}"`]);
+    if (bannerErr) log(`WARN banner call failed: ${bannerErr}`);
+  }
 
+  // Durable record — always, regardless of which channels are muted.
   try {
     appendFileSync(ALERTS_FILE, `${new Date().toISOString()}\t${title}\t${body.replace(/\n/g, ' | ')}\n`);
   } catch { /* best effort */ }
 
-  const soundFile = `/System/Library/Sounds/${sound}.aiff`;
-  if (existsSync(soundFile)) await run('/usr/bin/afplay', [soundFile]);
+  if (channels.sound) {
+    const soundFile = `/System/Library/Sounds/${sound}.aiff`;
+    if (existsSync(soundFile)) await run('/usr/bin/afplay', [soundFile]);
+  }
 
-  if (speak && process.env.FLIP_SPEAK !== '0') {
+  if (channels.speak && speak && process.env.FLIP_SPEAK !== '0') {
     run('/usr/bin/say', ['-r', '210', '-v', 'Samantha', speak]).catch(() => {});
   }
 
   // Email — the only channel that survives a closed lid.
+  if (!channels.email) return;
   let gmailPw = process.env.FLIP_GMAIL_APP_PASSWORD;
   if (!gmailPw) {
     try {
@@ -331,6 +350,7 @@ function loadWatchlist() {
       series,
       pinned: Array.isArray(w.pinned) ? w.pinned : [],
       thresholds: base,
+      alerts: { ...CHANNEL_DEFAULTS, ...(w.alerts || {}) },
     };
   } catch { return { state: 'corrupt', series: [], pinned: [], thresholds: {} }; }
 }
@@ -454,7 +474,14 @@ function sigHeadline(s) {
  * ------------------------------------------------------------------ */
 
 async function main() {
+  // Apply the channel config before anything can alert — including --test, so
+  // a test fires through exactly the channels a real signal would.
+  const wlEarly = loadWatchlist();
+  if (wlEarly.state === 'ok') channels = wlEarly.alerts;
+  const muted = Object.entries(channels).filter(([, on]) => !on).map(([k]) => k);
+
   if (args.has('--test')) {
+    if (muted.length) log(`note: ${muted.join(', ')} muted in kalshi-watchlist.json`);
     await notify('🔄 Fed cuts in Sept → YES (44¢→57¢)',
       '🔄 Fed above 4.00% → YES (44¢→57¢)  🔥 STRONG\n' +
       '  · decisive cross (now 57¢)\n  · liquid (48,200 24h vol)\n  · 3 markets in KXFED moved',
@@ -566,6 +593,10 @@ async function main() {
   if (args.has('--status')) {
     log(`${tracked.length} tracked markets across ${wl.series.length} series ` +
         `(${markets.length} open, ${markets.length - tracked.length} filtered out)`);
+    log(muted.length
+      ? `alert channels: ${Object.entries(channels).filter(([, on]) => on).map(([k]) => k).join(', ') || 'none'} ` +
+        `· MUTED: ${muted.join(', ')}`
+      : 'alert channels: all live');
     const bySeries = new Map();
     for (const t of tracked) {
       if (!bySeries.has(t.series)) bySeries.set(t.series, []);
@@ -693,7 +724,11 @@ async function main() {
   ).join(', ')}. ${top.setup.label.toLowerCase()} setup.`;
 
   await notify(title, body, { sound: 'Submarine', speak: spoken });
-  log(`ALERTED: ${scored.map(s => `${s.ticker} ${s.type} [${s.setup.label}:${s.setup.score}]`).join(', ')}`);
+  // Name the muted channels on every alert. A silenced watcher and a broken one
+  // look identical in the log otherwise, and that ambiguity is the whole thing
+  // this stack exists to avoid.
+  log(`ALERTED${muted.length ? ` (${muted.join('+')} muted)` : ''}: ` +
+      scored.map(s => `${s.ticker} ${s.type} [${s.setup.label}:${s.setup.score}]`).join(', '));
 }
 
 /* ------------------------------------------------------------------ *
