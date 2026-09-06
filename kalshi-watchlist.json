@@ -29,6 +29,14 @@
   "_pinned_comment": "Specific market tickers always watched, regardless of volume.",
   "pinned": [],
 
+  "_alerts_comment": "Delivery channels. kalshi-alerts.tsv is always written regardless — muting changes where a signal goes, never whether it is recorded. Set email back to true to resume Kalshi email. Does not affect the TradingView flip notifier, which has its own email path.",
+  "alerts": {
+    "banner": true,
+    "sound": true,
+    "speak": true,
+    "email": false
+  },
+
   "thresholds": {
     "min_volume_24h": 500,
     "move_cents": 10,

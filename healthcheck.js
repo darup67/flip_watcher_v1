@@ -532,8 +532,22 @@ function checkKalshiWatchlist() {
       return add('Kalshi watchlist', 'FAIL', 'no series configured — nothing to poll');
     }
     const pins = Array.isArray(w.pinned) ? w.pinned.length : 0;
-    add('Kalshi watchlist', 'OK',
-      `${series.length} series${pins ? ` + ${pins} pinned` : ''} · ${series.map(s => s.ticker).join(' ')}`);
+
+    // A muted channel is a deliberate choice, but an invisible one is
+    // indistinguishable from a broken one three weeks later. Say it out loud.
+    const a = { banner: true, sound: true, speak: true, email: true, ...(w.alerts || {}) };
+    const muted = Object.entries(a).filter(([, on]) => !on).map(([k]) => k);
+    const mutedNote = muted.length ? ` · MUTED: ${muted.join(', ')}` : '';
+
+    const detail =
+      `${series.length} series${pins ? ` + ${pins} pinned` : ''}${mutedNote} · ${series.map(s => s.ticker).join(' ')}`;
+
+    // Every channel off means signals reach only kalshi-alerts.tsv — still a
+    // deliberate setting, but worth a WARN rather than a silent OK.
+    if (muted.length === Object.keys(a).length) {
+      return add('Kalshi watchlist', 'WARN', `all alert channels muted — signals only reach kalshi-alerts.tsv · ${detail}`);
+    }
+    add('Kalshi watchlist', 'OK', detail);
   } catch (e) {
     add('Kalshi watchlist', 'FAIL', `unreadable: ${e.message}`);
   }
