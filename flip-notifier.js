@@ -617,6 +617,99 @@ async function attemptZombieRecovery() {
   return true;
 }
 
+/* ------------------------------------------------------------------ *
+ * Setup quality scoring
+ *
+ * When a flip fires, score it purely from data already in hand — the
+ * flip array, the regime map, and the alert log. No extra CDP calls,
+ * no latency. The score tells you which flips are worth acting on
+ * versus noise.
+ *
+ * Factors:
+ *   Correlation  (0-2)  How many symbols flipped the same direction?
+ *   Trend align  (0-2)  Does the flip go WITH the majority regime?
+ *   Stability    (0-1)  Has this symbol been choppy recently?
+ *
+ * Total 0-5 → WEAK (0-1) / MODERATE (2-3) / STRONG (4-5)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Count how many times a ticker has flipped in the last N hours,
+ * reading from alerts.tsv. Detects choppy (oscillating) symbols.
+ */
+function recentFlipCount(ticker, hours = 24) {
+  if (!existsSync(ALERTS_FILE)) return 0;
+  try {
+    const cutoff = Date.now() - hours * 3600 * 1000;
+    const lines = readFileSync(ALERTS_FILE, 'utf8').trim().split('\n');
+    let count = 0;
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const tab1 = lines[i].indexOf('\t');
+      if (tab1 === -1) continue;
+      const ts = lines[i].slice(0, tab1);
+      const lineTime = new Date(ts).getTime();
+      if (isNaN(lineTime) || lineTime < cutoff) break;   // sorted chronologically — done
+      const rest = lines[i].slice(tab1 + 1);
+      // Flip alerts contain the ticker and an arrow (→). Skip system alerts
+      // (blind, zombie, wake, recovered, drift, corrupt).
+      if (rest.includes(ticker) && rest.includes('→')) count++;
+    }
+    return count;
+  } catch { return 0; }
+}
+
+/**
+ * Score a single flip's setup quality.
+ * @param {Object} flip       { ticker, from, to }
+ * @param {Object[]} allFlips All flips in this poll cycle
+ * @param {Object} regimes    Current regime map (post-flip)
+ * @returns {{ score: number, label: string, factors: string[] }}
+ */
+function scoreSetup(flip, allFlips, regimes) {
+  const factors = [];
+  let score = 0;
+
+  // 1. Correlation: how many symbols flipped in the same direction?
+  const sameDir = allFlips.filter(f => f.to === flip.to);
+  if (sameDir.length >= 4) {
+    score += 2;
+    factors.push(`${sameDir.length} symbols flipped ${flip.to} together`);
+  } else if (sameDir.length >= 2) {
+    score += 1;
+    factors.push(`${sameDir.length} correlated ${flip.to} flip${sameDir.length > 2 ? 's' : ''}`);
+  } else {
+    factors.push('isolated flip');
+  }
+
+  // 2. Trend alignment: does this flip go WITH the current majority?
+  const total = Object.keys(regimes).length;
+  const sameSide = Object.values(regimes).filter(v => v === flip.to).length;
+  const pct = total > 0 ? sameSide / total : 0;
+  if (pct >= 0.6) {
+    score += 2;
+    factors.push(`trend-aligned (${sameSide}/${total} now ${flip.to})`);
+  } else if (pct >= 0.4) {
+    score += 1;
+    factors.push(`mixed field (${sameSide}/${total} ${flip.to})`);
+  } else {
+    factors.push(`counter-trend (only ${sameSide}/${total} ${flip.to})`);
+  }
+
+  // 3. Stability: has this symbol been flipping back and forth?
+  const recent = recentFlipCount(flip.ticker, 24);
+  if (recent === 0) {
+    score += 1;
+    factors.push('fresh move (no flips in 24h)');
+  } else {
+    factors.push(`choppy (${recent} flip${recent > 1 ? 's' : ''} in 24h)`);
+  }
+
+  const label = score >= 4 ? 'STRONG' : score >= 2 ? 'MODERATE' : 'WEAK';
+  return { score, label, factors };
+}
+
+const SCORE_EMOJI = { STRONG: '🔥', MODERATE: '⚡', WEAK: '💤' };
+
 /**
  * Reassemble table cells into { SYMBOL: 'BUY'|'SELL' }.
  * Row 0 is the study's header ("Symbol | State") and is skipped.
@@ -1176,23 +1269,34 @@ async function main() {
     return;
   }
 
+  // Score each flip's setup quality
+  const scored = flips.map(f => ({ ...f, setup: scoreSetup(f, flips, after) }));
+
   // This Mac has "Show previews: Never" (ncprefs content_visibility = 2), so
   // notification BODIES never render — for any app. The title is the only text
   // that reaches the screen, so the flips go there and the body carries the
   // detail for anyone who turns previews back on.
   const title = buildTitle(flips);
 
-  const body = flips
-    .map(f => `${f.ticker} ${f.from} → ${f.to}`)
-    .join(' · ');
+  // Enriched body with setup scoring — visible in email and alerts.tsv.
+  const body = scored
+    .map(f => {
+      const arrow = f.to === 'BUY' ? '⬆️' : '⬇️';
+      const e = SCORE_EMOJI[f.setup.label];
+      return `${arrow} ${f.ticker} → ${f.to}  ${e} ${f.setup.label}\n` +
+        f.setup.factors.map(fac => `  · ${fac}`).join('\n');
+    })
+    .join('\n\n');
 
-  // Spoken form reads naturally: "S Q Q Q flipped to sell".
+  // Spoken form: tickers + best setup's quality.
+  const best = scored.reduce((a, b) => a.setup.score >= b.setup.score ? a : b);
   const spoken = flips
     .map(f => `${f.ticker.replace(/[^A-Za-z0-9]/g, '')} flipped to ${f.to.toLowerCase()}`)
-    .join(', ');
+    .join(', ')
+    + `. ${best.setup.label.toLowerCase()} setup.`;
 
   await notify(title, body, { speak: spoken });
-  log(`NOTIFIED: ${flips.map(f => `${f.ticker} ${f.from}->${f.to}`).join(', ')}`);
+  log(`NOTIFIED: ${scored.map(f => `${f.ticker} ${f.from}->${f.to} [${f.setup.label}:${f.setup.score}]`).join(', ')}`);
 }
 
 // Read-only inspections do not take the lock, so `--status` still works while the

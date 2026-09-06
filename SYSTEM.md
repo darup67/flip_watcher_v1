@@ -149,6 +149,29 @@ Both code paths are live and tested; only the default changed.
 Verified: a flip mid-bar logs `in-bar sample` and stays silent; the same flip with
 the boundary passed fires `NOTIFIED: SQQQ BUY->SELL`.
 
+## Setup quality scoring
+
+Every flip alert is scored 0–5 on three factors, purely from data already in hand
+(no extra CDP calls, no latency):
+
+| Factor | Points | What it measures |
+|---|---|---|
+| Correlation | 0–2 | How many symbols flipped the same direction (1=isolated, 4+=wave) |
+| Trend alignment | 0–2 | Does the flip go WITH the majority regime? |
+| Stability | 0–1 | Has this ticker been choppy? (checks `alerts.tsv` last 24h) |
+
+Labels: 🔥 **STRONG** (4–5) · ⚡ **MODERATE** (2–3) · 💤 **WEAK** (0–1)
+
+The score appears in:
+- **Email body** — full breakdown with factors
+- **Speech** — "…strong setup." / "…weak setup."
+- **Log** — `NOTIFIED: TQQQ BUY->SELL [STRONG:5]`
+- **alerts.tsv** — durable record
+
+The banner title is unchanged (space-constrained, previews off). The score tells
+you which flips are worth acting on versus noise — a 5-symbol SELL wave scores
+STRONG, an isolated counter-trend flip in a choppy symbol scores WEAK.
+
 ## Sleep / lid close — the one gap the blind guard cannot cover
 
 Closing the lid sleeps the machine. `StartInterval` jobs do not fire during sleep,
