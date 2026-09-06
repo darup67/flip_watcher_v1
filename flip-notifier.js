@@ -83,7 +83,7 @@ const READ_BACKOFF_MS = 2500;
 // Zombie recovery: when the study is on the chart but stuck in a restart loop,
 // producing no table output. Reloading the page forces TradingView to re-init
 // all studies from the saved chart state, which clears runtime glitches.
-const ZOMBIE_AFTER = 10;              // consecutive failures before attempting recovery
+const ZOMBIE_AFTER = 5;               // consecutive failures before attempting recovery
 const ZOMBIE_COOLDOWN_MS = 10 * 60 * 1000;  // never reload more than once per 10 min
 const ZOMBIE_MAX_ATTEMPTS = 3;        // give up and escalate after this many reloads
 

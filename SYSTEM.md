@@ -52,7 +52,7 @@ A "zombie" study is attached to the chart but stuck in a runtime restart loop
 output, so the notifier logs "scanner table not found" every poll.
 
 **Notifier** (automatic):
-- After **10 consecutive** "scanner table not found" failures:
+- After **5 consecutive** "scanner table not found" failures:
   1. Checks via CDP if the study is on the chart but not completed (zombie).
   2. If confirmed, reloads the TradingView page (`Page.reload` via CDP).
   3. TradingView auto-saves chart state, so all studies and inputs survive.
