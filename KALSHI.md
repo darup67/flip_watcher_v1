@@ -112,19 +112,32 @@ tail:
 | **NORMAL** | 28–52¢ | ~62% |
 | 🔴 **HIGH** | > 52¢ | ~16% |
 
-### Alerting
+### Alerting — hourly, not on change
 
-**Edge-triggered on the band change only** — entering LOW, and leaving it. A calm
-hour would otherwise re-fire every 5 minutes, the same mistake the Core probe
-originally made.
+The regime is reported **once an hour**, whatever it is. Polls run every 5
+minutes, so the report lands on the first poll past each hour mark.
 
 ```
-🟢 BTC 15m vol LOW — 9c avg range over 4 windows
-⚪ BTC 15m vol back to NORMAL — 45c avg range over 4 windows
+🟢 BTC 15m vol LOW — 21c  (was NORMAL)
+⚪ BTC 15m vol NORMAL — 36c
+🔴 BTC 15m vol HIGH — 58c  (was NORMAL)
 ```
 
-Leaving LOW alerts too: the window you were waiting for has closed, and that is
-as actionable as its opening.
+The body carries the four window ranges it averaged, so a single wild window
+skewing the mean is visible rather than hidden:
+
+```
+KXBTC15M index 36.3c over 4 windows: 7c 84c 7c 47c
+bands: LOW <28c · NORMAL 28-52c · HIGH >52c
+```
+
+A band change since the last report is noted inline as `(was NORMAL)`, but it is
+**not** what triggers the alert — a band that holds LOW all morning is still
+worth being told about at 9, 10 and 11.
+
+The trade-off is latency: a LOW regime that starts at 9:05 is not reported until
+10:00. If catching a calm window as it opens matters more than a steady
+heartbeat, this should go back to edge-triggered, or run both.
 
 **It has its own channels.** `volAlerts` in the watchlist is deliberately separate
 from `alerts`, so the muted signal channels do not silence it:
@@ -146,8 +159,8 @@ The index runs **before** the no-signals early return, deliberately: a calm book
 produces no signals, which is precisely the state the LOW alert exists to catch.
 A failure here is logged and swallowed — it never breaks a poll.
 
-Verified by fault injection: forced 9¢ fires LOW through the global mute; a
-second poll at 9¢ stays silent; restoring 45¢ fires the exit alert.
+Verified: the first poll reports and stamps the time; an immediate second poll
+stays silent; backdating the stamp 61 minutes fires it again.
 
 ## Setup quality scoring
 
