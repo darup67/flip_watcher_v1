@@ -167,6 +167,29 @@ Every flip alert is scored 0–5 on three factors, purely from data already in h
 
 Labels: 🔥 **STRONG** (4–5) · ⚡ **MODERATE** (2–3) · 💤 **WEAK** (0–1)
 
+### Conviction floor
+
+**Flips scoring below MODERATE are recorded but not announced** (`MIN_SCORE`,
+default 2; override with `FLIP_MIN_SCORE`).
+
+WEAK means the flip was isolated, counter-trend, *and* on a ticker that has been
+oscillating — the three things that most often precede it reverting. Those are
+the alerts you look at, do nothing about, and slowly learn to ignore, which is
+what makes the ones worth acting on easy to miss.
+
+Suppression is deliberately **not** silence:
+
+- the regime **still updates**, so the next real flip diffs from a correct baseline
+- the flip is logged with its score: `held back 1 below-threshold flip(s): XRPUSD BUY->SELL [MODERATE:2]`
+- a partly-suppressed alert names the count: `NOTIFIED: … (+2 held back)`
+
+Scoring happens against the **full** set before filtering — correlation is a
+property of the whole poll, so a flip has to be measured against every sibling
+before any are dropped.
+
+Verified: a below-threshold flip is held back while state still advances to the
+new regime; a mixed poll alerts 3 and holds 2.
+
 The score appears in:
 - **Email body** — full breakdown with factors
 - **Speech** — "…strong setup." / "…weak setup."
