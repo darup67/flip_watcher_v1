@@ -711,6 +711,21 @@ function scoreSetup(flip, allFlips, regimes) {
 const SCORE_EMOJI = { STRONG: '🔥', MODERATE: '⚡', WEAK: '💤' };
 
 /**
+ * Conviction floor. A flip scoring below this is recorded but not announced.
+ *
+ * WEAK (0-1) means the flip was isolated, counter-trend, AND on a ticker that
+ * has been oscillating — the three things that most often precede a reversal
+ * back. Those are the alerts you look at, do nothing about, and slowly learn
+ * to ignore, which is what makes the ones worth acting on easy to miss.
+ *
+ * Suppression is NOT silence: the regime still updates, the flip is still
+ * written to the log with its score, and the alert line names how many were
+ * held back. A watcher that quietly drops signals is the exact failure this
+ * stack exists to prevent.
+ */
+const MIN_SCORE = Number(process.env.FLIP_MIN_SCORE ?? 2);   // 2 = MODERATE
+
+/**
  * Reassemble table cells into { SYMBOL: 'BUY'|'SELL' }.
  * Row 0 is the study's header ("Symbol | State") and is skipped.
  * Column 0 holds the ticker, column 1 the state.
@@ -1270,13 +1285,30 @@ async function main() {
   }
 
   // Score each flip's setup quality
-  const scored = flips.map(f => ({ ...f, setup: scoreSetup(f, flips, after) }));
+  const allScored = flips.map(f => ({ ...f, setup: scoreSetup(f, flips, after) }));
+
+  // Judge on the FULL set — correlation is a property of the whole poll, so a
+  // flip must be scored against every sibling before any are filtered out.
+  const scored    = allScored.filter(f => f.setup.score >= MIN_SCORE);
+  const suppressed = allScored.filter(f => f.setup.score < MIN_SCORE);
+
+  if (suppressed.length) {
+    log(`held back ${suppressed.length} below-threshold flip(s): ` +
+        suppressed.map(f => `${f.ticker} ${f.from}->${f.to} [${f.setup.label}:${f.setup.score}]`).join(', '));
+  }
+
+  // Everything was low-conviction. State is already saved above, so the regime
+  // stays correct and the next real flip diffs from the right baseline.
+  if (!scored.length) {
+    log(`no alert — all ${allScored.length} flip(s) below MIN_SCORE ${MIN_SCORE}`);
+    return;
+  }
 
   // This Mac has "Show previews: Never" (ncprefs content_visibility = 2), so
   // notification BODIES never render — for any app. The title is the only text
   // that reaches the screen, so the flips go there and the body carries the
   // detail for anyone who turns previews back on.
-  const title = buildTitle(flips);
+  const title = buildTitle(scored);
 
   // Enriched body with setup scoring — visible in email and alerts.tsv.
   const body = scored
@@ -1290,13 +1322,14 @@ async function main() {
 
   // Spoken form: tickers + best setup's quality.
   const best = scored.reduce((a, b) => a.setup.score >= b.setup.score ? a : b);
-  const spoken = flips
+  const spoken = scored
     .map(f => `${f.ticker.replace(/[^A-Za-z0-9]/g, '')} flipped to ${f.to.toLowerCase()}`)
     .join(', ')
     + `. ${best.setup.label.toLowerCase()} setup.`;
 
   await notify(title, body, { speak: spoken });
-  log(`NOTIFIED: ${scored.map(f => `${f.ticker} ${f.from}->${f.to} [${f.setup.label}:${f.setup.score}]`).join(', ')}`);
+  log(`NOTIFIED: ${scored.map(f => `${f.ticker} ${f.from}->${f.to} [${f.setup.label}:${f.setup.score}]`).join(', ')}` +
+      (suppressed.length ? ` (+${suppressed.length} held back)` : ''));
 }
 
 // Read-only inspections do not take the lock, so `--status` still works while the
