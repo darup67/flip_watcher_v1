@@ -620,7 +620,11 @@ function checkKalshiLog() {
   let lastOkAt = null;
   for (let i = lines.length - 1; i >= 0; i -= 1) {
     const l = lines[i];
-    if (/no signals|\bALERTED\b|baseline saved|settling/.test(l)) {
+    // Every shape a HEALTHY poll can take. This list has now been wrong twice —
+    // once when muting rewrote 'ALERTED:' and once when BTC-only mode replaced
+    // the outcome line entirely. Any new terminal log line must be added here,
+    // or a working watcher reports a stale 'last success'.
+    if (/no signals|\bALERTED\b|BTC-only mode|baseline saved|settling/.test(l)) {
       lastOkAt = Date.parse(l.slice(0, 24)); break;
     }
     if (/FAIL|ERROR|FATAL/.test(l)) sinceSuccess += 1;
