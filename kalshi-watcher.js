@@ -372,6 +372,9 @@ function loadWatchlist() {
       pinned: Array.isArray(w.pinned) ? w.pinned : [],
       thresholds: base,
       alerts: { ...CHANNEL_DEFAULTS, ...(w.alerts || {}) },
+      // The vol alert is opt-in separately: the user muted signal noise but
+      // still wants to hear about a calm book, so it must not inherit that mute.
+      volAlerts: { ...CHANNEL_DEFAULTS, ...(w.volAlerts || {}) },
     };
   } catch { return { state: 'corrupt', series: [], pinned: [], thresholds: {} }; }
 }
@@ -552,6 +555,147 @@ function collapseLadders(signals) {
   return out;
 }
 
+/* ------------------------------------------------------------------ *
+ * BTC 15-minute volatility index
+ *
+ * KXBTC15M ("BTC price up in next 15 mins?") is the deepest 15-minute crypto
+ * market on Kalshi — ~8k trades per window against 2-5k for ETH/XRP/SOL. That
+ * depth is what makes it measurable: the book reprices in small increments
+ * rather than jumping between prints.
+ *
+ * The index is the mean intra-window price RANGE (max - min of executed
+ * trades) over the last VOL_WINDOWS settled windows. Range beats standard
+ * deviation here because it answers the question a trader actually has —
+ * how far did this thing travel while I held it.
+ *
+ * Bands are measured, not guessed. Over 48 consecutive settled windows
+ * (12 h, 2026-09-06/07) single-window range ran 2.4c - 98.3c, median 34.4c.
+ * Smoothed over 4 windows the index ran 7.2c - 65.5c, and these cuts put
+ * roughly a fifth of the time in each tail:
+ *
+ *   LOW    < 28c   calm book, ~22% of observed hours
+ *   NORMAL          28-52c
+ *   HIGH   > 52c   ~16%
+ *
+ * Per-window ranges are cached by ticker in state, so a poll only fetches
+ * windows it has never seen — steady state is one new window per 15 minutes,
+ * not a full recompute every 5.
+ * ------------------------------------------------------------------ */
+
+const VOL_SERIES     = 'KXBTC15M';
+const VOL_WINDOWS    = 4;      // 1 hour of 15-minute windows
+const VOL_LOW        = 28;     // cents — below this the book is calm
+const VOL_HIGH       = 52;
+const VOL_TRADE_PAGES = 8;     // 1000 trades/page; a window runs ~8k
+const VOL_CACHE_MAX  = 40;     // keep the cache from growing without bound
+
+const volBand = v => (v < VOL_LOW ? 'LOW' : v > VOL_HIGH ? 'HIGH' : 'NORMAL');
+
+/** Executed-price range for one settled window, in cents. */
+async function volWindowRange(ticker) {
+  let cursor = null, lo = Infinity, hi = -Infinity, n = 0;
+  for (let page = 0; page < VOL_TRADE_PAGES; page++) {
+    // Reuse apiGet so this inherits the pacing, 429 backoff and retries —
+    // paging trades is exactly the pattern that trips Kalshi's rate limiter.
+    const d = await apiGet('/markets/trades',
+      { ticker, limit: 1000, ...(cursor ? { cursor } : {}) });
+    const trades = d?.trades || [];
+    for (const t of trades) {
+      let p = t.yes_price_dollars ?? t.yes_price;
+      if (p == null) continue;
+      p = Number(p);
+      if (!Number.isFinite(p)) continue;
+      if (p <= 1.001) p *= 100;          // dollars -> cents
+      if (p < lo) lo = p;
+      if (p > hi) hi = p;
+      n++;
+    }
+    cursor = d?.cursor;
+    if (!cursor || !trades.length) break;
+  }
+  // A window with almost no prints cannot produce a meaningful range.
+  if (n < 20 || !Number.isFinite(lo) || !Number.isFinite(hi)) return null;
+  return { range: hi - lo, trades: n };
+}
+
+/**
+ * Recompute the index and, on a NEW entry into LOW, alert.
+ *
+ * Edge-triggered: the band must actually change. A calm hour would otherwise
+ * re-fire every 5 minutes, which is the same mistake the Core probe made.
+ */
+async function updateBtcVolIndex(prev) {
+  let markets;
+  try {
+    const d = await apiGet('/markets', {
+      series_ticker: VOL_SERIES, status: 'settled',
+      limit: VOL_WINDOWS + 4, mve_filter: 'exclude' });
+    markets = (d?.markets || []).filter(m => m?.ticker);
+  } catch (e) {
+    log(`vol index: cannot list ${VOL_SERIES} — ${e.message}`);
+    return null;
+  }
+  if (markets.length < VOL_WINDOWS) return null;
+
+  const cache = { ...(prev.volCache || {}) };
+  const recent = markets.slice(0, VOL_WINDOWS);
+  const ranges = [];
+
+  for (const m of recent) {
+    if (cache[m.ticker] != null) { ranges.push(cache[m.ticker]); continue; }
+    let r = null;
+    try { r = await volWindowRange(m.ticker); }
+    catch (e) { log(`vol index: trades failed for ${m.ticker} — ${e.message}`); }
+    if (!r) continue;
+    cache[m.ticker] = r.range;
+    ranges.push(r.range);
+  }
+  if (ranges.length < VOL_WINDOWS) return null;   // partial hour — do not judge
+
+  const index = ranges.reduce((a, b) => a + b, 0) / ranges.length;
+  const band  = volBand(index);
+  const was   = prev.volBand || null;
+
+  // Trim the cache to the most recent tickers we know about.
+  const keep = new Set(markets.slice(0, VOL_CACHE_MAX).map(m => m.ticker));
+  for (const k of Object.keys(cache)) if (!keep.has(k)) delete cache[k];
+
+  return { index, band, was, cache, windows: ranges };
+}
+
+/** The vol alert has its OWN channels — see volAlerts in the watchlist. */
+let volChannels = { ...CHANNEL_DEFAULTS };
+
+async function reportBtcVol(v) {
+  if (!v || v.band === v.was) return;            // no band change, stay quiet
+
+  const arrowed = `${v.index.toFixed(0)}c avg range over ${v.windows.length} windows`;
+  const detail =
+    `${VOL_SERIES} index ${v.index.toFixed(1)}c (${v.windows.map(r => r.toFixed(0) + 'c').join(' ')})\n` +
+    `bands: LOW <${VOL_LOW}c, HIGH >${VOL_HIGH}c`;
+
+  if (v.band === 'LOW') {
+    const saved = channels;
+    channels = volChannels;                      // this alert bypasses the signal mute
+    try {
+      await notify(`🟢 BTC 15m vol LOW — ${arrowed}`, detail,
+        { sound: 'Hero', speak: `Bitcoin fifteen minute volatility is low. ${v.index.toFixed(0)} cent average range.` });
+    } finally { channels = saved; }
+    log(`VOL LOW: index ${v.index.toFixed(1)}c (was ${v.was || 'unknown'})`);
+  } else {
+    // Leaving LOW matters too — the window you were waiting for has closed.
+    if (v.was === 'LOW') {
+      const saved = channels;
+      channels = volChannels;
+      try {
+        await notify(`⚪ BTC 15m vol back to ${v.band} — ${arrowed}`, detail,
+          { sound: 'Pop', speak: `Bitcoin fifteen minute volatility is ${v.band.toLowerCase()} again.` });
+      } finally { channels = saved; }
+    }
+    log(`VOL ${v.band}: index ${v.index.toFixed(1)}c (was ${v.was || 'unknown'})`);
+  }
+}
+
 const SIG_ICON = { FLIP: '🔄', MOVE: '📈', VOLUME: '📊' };
 
 function sigHeadline(s) {
@@ -584,7 +728,10 @@ async function main() {
   // Apply the channel config before anything can alert — including --test, so
   // a test fires through exactly the channels a real signal would.
   const wlEarly = loadWatchlist();
-  if (wlEarly.state === 'ok') channels = wlEarly.alerts;
+  if (wlEarly.state === 'ok') {
+    channels = wlEarly.alerts;
+    volChannels = wlEarly.volAlerts;
+  }
   const muted = Object.entries(channels).filter(([, on]) => !on).map(([k]) => k);
 
   if (args.has('--test')) {
@@ -808,10 +955,26 @@ async function main() {
     }
   }
 
-  saveState({ ...base, settleUntil: null });
+  // The BTC vol index runs on every poll, and deliberately BEFORE the
+  // no-signals early return: a calm book produces no signals, which is exactly
+  // the state the LOW alert exists to catch. Putting it after would mean it
+  // never fired in the case it was built for.
+  let volState = {};
+  try {
+    const v = await updateBtcVolIndex(prev);
+    if (v) {
+      await reportBtcVol(v);
+      volState = { volBand: v.band, volIndex: Number(v.index.toFixed(2)), volCache: v.cache };
+    }
+  } catch (e) {
+    log(`vol index failed (non-fatal): ${e.message}`);   // never break a poll over it
+  }
+
+  saveState({ ...base, ...volState, settleUntil: null });
 
   if (!signals.length) {
-    log(`no signals (${tracked.length} markets checked)`);
+    log(`no signals (${tracked.length} markets checked)` +
+        (volState.volIndex != null ? ` · BTC vol ${volState.volIndex}c ${volState.volBand}` : ''));
     return;
   }
 
