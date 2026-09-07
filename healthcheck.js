@@ -177,11 +177,51 @@ function cdpEval(page, expression) {
   });
 }
 
+/**
+ * Reload via the Page domain rather than Runtime.evaluate. When the renderer is
+ * wedged, an evaluate never returns — so `window.location.reload()` cannot be
+ * the recovery for the very failure that needs recovering.
+ */
+function cdpPageReload(page) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(page.webSocketDebuggerUrl, { perMessageDeflate: false });
+    const t = setTimeout(() => { try { ws.close(); } catch {} reject(new Error('reload timeout')); }, 10000);
+    ws.on('open', () => ws.send(JSON.stringify({ id: 1, method: 'Page.reload', params: {} })));
+    ws.on('message', raw => {
+      let m; try { m = JSON.parse(raw.toString()); } catch { return; }
+      if (m.id !== 1) return;
+      clearTimeout(t); try { ws.close(); } catch {}
+      m.error ? reject(new Error(m.error.message)) : resolve();
+    });
+    ws.on('error', e => { clearTimeout(t); reject(e); });
+  });
+}
+
 async function checkStudy(page) {
   if (!page) { add('Flip Scanner', 'FAIL', 'skipped — no chart'); return null; }
   let v;
   try { v = await cdpEval(page, EXTRACT); }
-  catch (e) { add('Flip Scanner', 'FAIL', `read failed: ${e.message}`); return null; }
+  catch (e) {
+    // The read itself timed out. The page is listed (we got here with a `page`),
+    // so the browser is alive and the renderer is wedged — the one case a
+    // Page.reload fixes and an evaluate-based repair cannot even attempt.
+    const wedged = /timeout/i.test(e.message);
+    if (wedged && process.argv.includes('--repair')) {
+      try {
+        await cdpPageReload(page);
+        add('Flip Scanner', 'WARN',
+          'renderer was wedged (evaluate timed out, tab alive) — page reloaded by ' +
+          '--repair; re-run healthcheck in ~60s to verify');
+        return null;
+      } catch (re) {
+        log(`  wedged recovery failed: ${re.message}`);
+      }
+    }
+    add('Flip Scanner', 'FAIL', `read failed: ${e.message}` +
+      (wedged && !process.argv.includes('--repair')
+        ? ' — renderer wedged; rerun with --repair to reload the page' : ''));
+    return null;
+  }
   if (v?.error) { add('Flip Scanner', 'FAIL', `page error: ${v.error}`); return null; }
   if (!v?.flip) {
     add('Flip Scanner', 'FAIL',
@@ -200,7 +240,7 @@ async function checkStudy(page) {
               `started=${zombieCheck.isStarted} restarting=${zombieCheck.restarting}`);
           // Reload the page — TradingView auto-saves chart state, so everything
           // comes back, but the runtime glitch is cleared.
-          await cdpEval(page, 'window.location.reload()');
+          await cdpPageReload(page);
           reloaded = true;
           add('Flip Scanner', 'WARN',
             'was zombie (attached, not rendering) — page reloaded by --repair; ' +

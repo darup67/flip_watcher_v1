@@ -87,6 +87,16 @@ const ZOMBIE_AFTER = 5;               // consecutive failures before attempting 
 const ZOMBIE_COOLDOWN_MS = 10 * 60 * 1000;  // never reload more than once per 10 min
 const ZOMBIE_MAX_ATTEMPTS = 3;        // give up and escalate after this many reloads
 
+// A wedged renderer is a DIFFERENT failure from a zombie study. Here the CDP
+// endpoint is alive and still lists targets, but Runtime.evaluate never returns,
+// so the zombie check — which is itself an evaluate — cannot run. Seen on
+// 2026-09-07 when the tradingview-mcp CDP sessions were killed mid-call (the
+// desktop app restarted) and left the page's execution context stuck. The page
+// reload clears it. Detection is the asymmetry: evaluate times out while the
+// HTTP target list still answers.
+const WEDGED_PATTERNS = ['evaluate timed out', 'CDP evaluate timed out'];
+const isWedgedReason = r => WEDGED_PATTERNS.some(p => r.includes(p));
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* ------------------------------------------------------------------ *
@@ -546,7 +556,7 @@ async function cdpReload() {
  *
  * Returns true if a recovery was attempted, false if skipped.
  */
-async function attemptZombieRecovery() {
+async function attemptZombieRecovery({ wedged = false } = {}) {
   const prev = loadState() || {};
   const now = Date.now();
 
@@ -570,30 +580,52 @@ async function attemptZombieRecovery() {
     return false;
   }
 
-  // Check if the study is actually on the chart (zombie = present but not rendering)
+  // A wedged renderer cannot answer an evaluate, so ZOMBIE_CHECK_JS would just
+  // time out again and we would never recover. Instead prove the browser is
+  // still there over HTTP (the target list), which distinguishes "renderer
+  // stuck" from "TradingView is gone" — a reload only helps in the first case.
   let check;
-  try {
-    check = await cdpEvaluate(ZOMBIE_CHECK_JS, v => v && !v.error);
-  } catch (e) {
-    log(`ZOMBIE detection failed (CDP error): ${e.message}`);
-    return false;
+  if (wedged) {
+    let pages;
+    try {
+      pages = await cdpGetPages();
+    } catch (e) {
+      log(`WEDGED check: CDP target list unreachable (${e.message}) — TradingView is down, not wedged`);
+      return false;
+    }
+    if (!pages || !pages.length) {
+      log('WEDGED check: no chart tab in target list — reload would not help');
+      return false;
+    }
+    log(`WEDGED confirmed: ${pages.length} chart tab(s) listed but evaluate is stuck ` +
+        `(attempt ${attempts}/${ZOMBIE_MAX_ATTEMPTS}) — reloading page`);
+    check = { found: true, name: 'wedged renderer', statusType: -1 };
+  } else {
+    try {
+      check = await cdpEvaluate(ZOMBIE_CHECK_JS, v => v && !v.error);
+    } catch (e) {
+      log(`ZOMBIE detection failed (CDP error): ${e.message}`);
+      return false;
+    }
   }
 
-  if (!check || check.error) {
-    log(`ZOMBIE detection failed: ${check?.error || 'no response'}`);
-    return false;
-  }
+  if (!wedged) {
+    if (!check || check.error) {
+      log(`ZOMBIE detection failed: ${check?.error || 'no response'}`);
+      return false;
+    }
 
-  if (!check.found) {
-    // Study is genuinely missing from the chart — a reload won't help
-    log('ZOMBIE check: study not on chart — reload would not help');
-    return false;
-  }
+    if (!check.found) {
+      // Study is genuinely missing from the chart — a reload won't help
+      log('ZOMBIE check: study not on chart — reload would not help');
+      return false;
+    }
 
-  // Study is on the chart but not producing output → zombie confirmed
-  log(`ZOMBIE confirmed: ${check.name} · status=${check.statusType} ` +
-      `started=${check.isStarted} restarting=${check.restarting} ` +
-      `(attempt ${attempts}/${ZOMBIE_MAX_ATTEMPTS}) — reloading page`);
+    // Study is on the chart but not producing output → zombie confirmed
+    log(`ZOMBIE confirmed: ${check.name} · status=${check.statusType} ` +
+        `started=${check.isStarted} restarting=${check.restarting} ` +
+        `(attempt ${attempts}/${ZOMBIE_MAX_ATTEMPTS}) — reloading page`);
+  }
 
   try {
     await cdpReload();
@@ -1070,9 +1102,11 @@ async function recordFailure(reason) {
   // Zombie auto-recovery: if the scanner table is consistently missing and the
   // study is still attached to the chart, it is stuck in a runtime glitch.
   // Reloading the page forces TradingView to re-init from saved state.
-  if (failures >= ZOMBIE_AFTER && reason.includes('scanner table not found') && !wasDown) {
-    const recovered = await attemptZombieRecovery();
-    if (recovered) log('ZOMBIE recovery attempted — next poll will verify');
+  const tableMissing = reason.includes('scanner table not found');
+  const wedged = isWedgedReason(reason);
+  if (failures >= ZOMBIE_AFTER && (tableMissing || wedged) && !wasDown) {
+    const recovered = await attemptZombieRecovery({ wedged: wedged && !tableMissing });
+    if (recovered) log(`${wedged ? 'WEDGED' : 'ZOMBIE'} recovery attempted — next poll will verify`);
   }
 
   process.exitCode = 1;
