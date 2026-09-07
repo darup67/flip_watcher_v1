@@ -1,42 +1,106 @@
 {
   "_comment": "Kalshi series to watch. A series ticker is the prefix before the first dash in a market ticker. Find them with: node kalshi-watcher.js --discover <keyword>",
-
   "_thresholds_comment": "Top-level `thresholds` are the defaults. Any series can override any of them with its own `thresholds` block. Sports and macro cannot share one setting: a 10c move is news on a Fed contract and just the third quarter happening on an NFL moneyline.",
-
   "series": [
-    { "ticker": "KXFED",        "label": "Fed funds rate" },
-    { "ticker": "KXCPI",        "label": "CPI inflation" },
-    { "ticker": "KXBTCD",       "label": "Bitcoin daily" },
-    { "ticker": "KXETHD",       "label": "Ethereum daily" },
-    { "ticker": "KXNASDAQ100",  "label": "Nasdaq-100" },
-    { "ticker": "KXINX",        "label": "S&P 500" },
-    { "ticker": "KXRECSSNBER",  "label": "Recession" },
-    { "ticker": "KXU3EOY",      "label": "Unemployment EOY" },
-
-    { "ticker": "KXNFLGAME",    "label": "NFL winner",
-      "thresholds": { "min_volume_24h": 5000, "move_cents": 25, "no_flip": true, "no_volume": true } },
-    { "ticker": "KXNFLSPREAD",  "label": "NFL spread",
-      "thresholds": { "min_volume_24h": 5000, "move_cents": 25, "no_flip": true, "no_volume": true } },
-
-    { "ticker": "KXNCAAFGAME",  "label": "NCAAF winner",
-      "thresholds": { "min_volume_24h": 5000, "move_cents": 25, "no_flip": true, "no_volume": true } },
-    { "ticker": "KXNCAAFSPREAD", "label": "NCAAF spread",
-      "thresholds": { "min_volume_24h": 5000, "move_cents": 25, "no_flip": true, "no_volume": true } },
-    { "ticker": "KXNCAAFTOTAL", "label": "NCAAF total",
-      "thresholds": { "min_volume_24h": 5000, "move_cents": 25, "no_flip": true, "no_volume": true } }
+    {
+      "ticker": "KXFED",
+      "label": "Fed funds rate"
+    },
+    {
+      "ticker": "KXCPI",
+      "label": "CPI inflation"
+    },
+    {
+      "ticker": "KXBTCD",
+      "label": "Bitcoin daily"
+    },
+    {
+      "ticker": "KXETHD",
+      "label": "Ethereum daily"
+    },
+    {
+      "ticker": "KXNASDAQ100",
+      "label": "Nasdaq-100"
+    },
+    {
+      "ticker": "KXINX",
+      "label": "S&P 500"
+    },
+    {
+      "ticker": "KXRECSSNBER",
+      "label": "Recession"
+    },
+    {
+      "ticker": "KXU3EOY",
+      "label": "Unemployment EOY"
+    },
+    {
+      "ticker": "KXNFLGAME",
+      "label": "NFL winner",
+      "thresholds": {
+        "min_volume_24h": 5000,
+        "move_cents": 25,
+        "no_flip": true,
+        "no_volume": true
+      }
+    },
+    {
+      "ticker": "KXNFLSPREAD",
+      "label": "NFL spread",
+      "thresholds": {
+        "min_volume_24h": 5000,
+        "move_cents": 25,
+        "no_flip": true,
+        "no_volume": true
+      }
+    },
+    {
+      "ticker": "KXNCAAFGAME",
+      "label": "NCAAF winner",
+      "thresholds": {
+        "min_volume_24h": 5000,
+        "move_cents": 25,
+        "no_flip": true,
+        "no_volume": true
+      }
+    },
+    {
+      "ticker": "KXNCAAFSPREAD",
+      "label": "NCAAF spread",
+      "thresholds": {
+        "min_volume_24h": 5000,
+        "move_cents": 25,
+        "no_flip": true,
+        "no_volume": true
+      }
+    },
+    {
+      "ticker": "KXNCAAFTOTAL",
+      "label": "NCAAF total",
+      "thresholds": {
+        "min_volume_24h": 5000,
+        "move_cents": 25,
+        "no_flip": true,
+        "no_volume": true
+      }
+    }
   ],
-
   "_pinned_comment": "Specific market tickers always watched, regardless of volume.",
   "pinned": [],
-
-  "_alerts_comment": "Delivery channels. kalshi-alerts.tsv is always written regardless — muting changes where a signal goes, never whether it is recorded. Set email back to true to resume Kalshi email. Does not affect the TradingView flip notifier, which has its own email path.",
+  "_alerts_comment": "Delivery channels. kalshi-alerts.tsv is always written regardless \u2014 muting changes where a signal goes, never whether it is recorded. Set email back to true to resume Kalshi email. Does not affect the TradingView flip notifier, which has its own email path.",
   "alerts": {
     "banner": false,
     "sound": false,
     "speak": false,
     "email": false
   },
-
+  "_volAlerts_comment": "Channels for the BTC 15m volatility-index alert ONLY. Deliberately separate from `alerts` so muting signal noise does not also mute this. Fires on the band CHANGE only (into LOW, and back out), never every poll.",
+  "volAlerts": {
+    "banner": true,
+    "sound": true,
+    "speak": true,
+    "email": true
+  },
   "thresholds": {
     "min_volume_24h": 500,
     "move_cents": 10,

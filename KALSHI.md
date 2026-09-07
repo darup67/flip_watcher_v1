@@ -77,6 +77,78 @@ disguised as a ladder.
 Verified: 6 near-money BTC strikes + 1 isolated recession move → `7 signals
 folded to 2` (one LADDER, one standalone); a 3-up/3-down group renders mixed.
 
+## BTC 15-minute volatility index
+
+`KXBTC15M` — *"BTC price up in next 15 mins?"* — is the deepest 15-minute crypto
+market on Kalshi: **~8,000 trades per window** against 2,400–4,800 for ETH, XRP
+and SOL, and 68k in 24h volume against 1.4k–5.6k. That depth is what makes it
+measurable — the book reprices in small increments instead of jumping between
+prints.
+
+**The index** is the mean intra-window **price range** (max − min of executed
+trades) over the last **4 settled windows** (1 hour). Range beats standard
+deviation here because it answers the question a trader actually has: how far
+did this thing travel while I held it.
+
+### The bands are measured, not guessed
+
+Over 48 consecutive settled windows (12 h, 2026-09-06/07):
+
+| | single window | smoothed over 4 |
+|---|---|---|
+| min | 2.4¢ | 7.2¢ |
+| p25 | 17.1¢ | 29.1¢ |
+| median | 34.4¢ | 39.7¢ |
+| p75 | 49.4¢ | 50.2¢ |
+| max | 98.3¢ | 65.5¢ |
+
+Single windows are far too noisy to band (2.4¢ → 98.3¢ inside one hour), which
+is why the index smooths. The cuts put roughly a fifth of observed hours in each
+tail:
+
+| Band | Range | Frequency |
+|---|---|---|
+| 🟢 **LOW** | < 28¢ | ~22% |
+| **NORMAL** | 28–52¢ | ~62% |
+| 🔴 **HIGH** | > 52¢ | ~16% |
+
+### Alerting
+
+**Edge-triggered on the band change only** — entering LOW, and leaving it. A calm
+hour would otherwise re-fire every 5 minutes, the same mistake the Core probe
+originally made.
+
+```
+🟢 BTC 15m vol LOW — 9c avg range over 4 windows
+⚪ BTC 15m vol back to NORMAL — 45c avg range over 4 windows
+```
+
+Leaving LOW alerts too: the window you were waiting for has closed, and that is
+as actionable as its opening.
+
+**It has its own channels.** `volAlerts` in the watchlist is deliberately separate
+from `alerts`, so the muted signal channels do not silence it:
+
+```json
+"alerts":    { "banner": false, "sound": false, "speak": false, "email": false },
+"volAlerts": { "banner": true,  "sound": true,  "speak": true,  "email": true  }
+```
+
+### Cost
+
+Per-window ranges are **cached by ticker** in `kalshi-state.json`. A poll only
+fetches windows it has never seen, so steady state is one new window per 15
+minutes — not a full recompute every 5. Trade paging goes through `apiGet`, so it
+inherits the pacing, 429 backoff and retries; paging trades is exactly the
+pattern that trips Kalshi's rate limiter.
+
+The index runs **before** the no-signals early return, deliberately: a calm book
+produces no signals, which is precisely the state the LOW alert exists to catch.
+A failure here is logged and swallowed — it never breaks a poll.
+
+Verified by fault injection: forced 9¢ fires LOW through the global mute; a
+second poll at 9¢ stays silent; restoring 45¢ fires the exit alert.
+
 ## Setup quality scoring
 
 Same 0–5 scale as the Flip Watcher, so STRONG means the same thing in both:
