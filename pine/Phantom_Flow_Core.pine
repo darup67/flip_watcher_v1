@@ -1,0 +1,920 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+
+//@version=6
+
+// -----------------------------------------------------------------------------
+//  ⓒ Phantom Flow getphantomflow.com
+//  This Pine Script code is proprietary. Unauthorized redistribution or resale
+//  is strictly prohibited. For personal use only unless licensed otherwise.
+// -----------------------------------------------------------------------------
+indicator('Phantom Flow Core', 'Phantom Flow Core', overlay = true, max_labels_count = 500, max_lines_count = 500, max_boxes_count = 500)
+
+// =============================================================================
+// SECTION 1: PHANTOM SHIFT
+// =============================================================================
+groupShift = 'Phantom Shift'
+
+showPhantomShift = input.bool(true, 'Show Phantom Shift', group = groupShift, tooltip = 'The trend line that follows price — green under price when the trend is up, red above price when the trend is down', display = display.none)
+shiftATRPeriod = input.int(10, 'ATR Period', group = groupShift, tooltip = 'How many bars are used to measure market movement. Higher = smoother line that reacts more slowly', display = display.none)
+shiftMultiplier = input.float(3.0, 'Multiplier', step = 0.1, group = groupShift, tooltip = 'How far price must move to flip the trend. Higher = fewer but stronger signals. Lower = earlier but noisier signals', display = display.none)
+shiftSource = input.source(hl2, 'Source', group = groupShift, tooltip = 'The price value the trend follows. hl2 (the bar midpoint) is the standard', display = display.none)
+shiftUseBuiltInATR = input.bool(true, 'Use Built-in ATR?', group = groupShift, tooltip = 'Leave on for the standard calculation', display = display.none)
+shiftShowSignals = input.bool(true, 'Show Buy/Sell Signals?', group = groupShift, tooltip = 'Show Buy and Sell labels on the chart when the trend flips', display = display.none)
+shiftHighlightBg = input.bool(true, 'Highlight Trend Background?', group = groupShift, tooltip = 'Tint the chart background green or red to match the current trend', display = display.none)
+
+// ATR calculation
+atrCustom = ta.sma(ta.tr, shiftATRPeriod)
+atrShift = shiftUseBuiltInATR ? ta.atr(shiftATRPeriod) : atrCustom
+
+// Phantom Shift bands calculation
+upShift = shiftSource - shiftMultiplier * atrShift
+upShiftPrev = nz(upShift[1], upShift)
+upShift := close[1] > upShiftPrev ? math.max(upShift, upShiftPrev) : upShift
+
+dnShift = shiftSource + shiftMultiplier * atrShift
+dnShiftPrev = nz(dnShift[1], dnShift)
+dnShift := close[1] < dnShiftPrev ? math.min(dnShift, dnShiftPrev) : dnShift
+
+// Trend detection
+var int shiftTrend = 1
+shiftTrend := shiftTrend == -1 and close > dnShiftPrev ? 1 : shiftTrend == 1 and close < upShiftPrev ? -1 : shiftTrend
+
+// Signal generation
+shiftBuy = shiftTrend == 1 and shiftTrend[1] == -1
+shiftSell = shiftTrend == -1 and shiftTrend[1] == 1
+
+// Visualization
+upPlotShift = plot(showPhantomShift and shiftTrend == 1 ? upShift : na, 'Phantom Shift Up', color = color.green, linewidth = 2, display = display.all - display.status_line)
+dnPlotShift = plot(showPhantomShift and shiftTrend == -1 ? dnShift : na, 'Phantom Shift Down', color = color.red, linewidth = 2, display = display.all - display.status_line)
+
+plotshape(showPhantomShift and shiftBuy and shiftShowSignals ? upShift : na, title = 'Buy Shift', location = location.belowbar, style = shape.labelup, color = color.green, textcolor = color.white, text = 'Buy', display = display.pane)
+plotshape(showPhantomShift and shiftSell and shiftShowSignals ? dnShift : na, title = 'Sell Shift', location = location.abovebar, style = shape.labeldown, color = color.red, textcolor = color.white, text = 'Sell', display = display.pane)
+
+bgcolor(showPhantomShift and shiftHighlightBg ? shiftTrend == 1 ? color.new(color.green, 90) : color.new(color.red, 90) : na, title = 'Phantom Shift Highlight')
+
+// Alerts
+alertcondition(shiftBuy, title = 'Phantom Shift Buy', message = 'Phantom Shift Buy Signal — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(shiftSell, title = 'Phantom Shift Sell', message = 'Phantom Shift Sell Signal — {{ticker}} · {{interval}} · Price {{close}}')
+
+// =============================================================================
+// SECTION 2: PHANTOM FLOW - CORE STRUCTURE MODULE
+// =============================================================================
+
+// CONSTANTS, ENUMS, AND INPUT GROUPS
+// -----------------------------------------------------------------------------
+// Leg and bias constants
+BULLISH_LEG = 1
+BEARISH_LEG = 0
+BULLISH = +1
+BEARISH = -1
+
+// Color constants
+GREEN = #089981
+RED = #F23645
+BLUE = #2157f3
+GRAY = #878b94
+MONO_BULLISH = #b2b5be
+MONO_BEARISH = #5d606b
+
+// Display mode constants
+HISTORICAL = 'Historical'
+PRESENT = 'Present'
+COLORED = 'Colored'
+MONOCHROME = 'Monochrome'
+ALL = 'All'
+BOS = 'BOS'
+CHOCH = 'CHoCH'
+
+// Size constants
+TINY = size.tiny
+SMALL = size.small
+NORMAL = size.normal
+
+// Filter constants
+ATR = 'Atr'
+RANGE = 'Cumulative Mean Range'
+CLOSE = 'Close'
+HIGHLOW = 'High/Low'
+
+// Line style constants
+SOLID = '⎯⎯⎯'
+DASHED = '----'
+DOTTED = '····'
+
+// Group constants
+SMART_GROUP = 'Smart Money Concepts'
+INTERNAL_GROUP = 'Real Time Internal Structure'
+SWING_GROUP = 'Real Time Swing Structure'
+BLOCKS_GROUP = 'Order Blocks'
+EQUAL_GROUP = 'EQH/EQL'
+GAPS_GROUP = 'Fair Value Gaps'
+LEVELS_GROUP = 'Highs & Lows MTF'
+ZONES_GROUP = 'Premium & Discount Zones'
+
+// Tooltip text constants — written for traders who are new to structure
+// concepts: plain English, outcome first, jargon explained in passing.
+modeTooltip = 'Historical keeps everything that ever formed on the chart. Present shows only the most recent — a much cleaner chart'
+styleTooltip = 'Colored is the classic look. Monochrome turns everything gray for minimal charts'
+showTrendTooltip = 'Recolor candles to match the current market-structure trend, so you can read the trend at a glance'
+showInternalsTooltip = 'Short-term structure breaks (BOS = trend continues, CHoCH = trend may be reversing). These fire often — they track the market\'s small shifts'
+internalFilterConfluenceTooltip = 'Hide the less meaningful short-term breaks to reduce chart noise'
+showStructureTooltip = 'Major structure breaks — the big trend changes. These are the ones worth paying most attention to'
+showSwingsTooltip = 'Label every swing point: HH higher high, HL higher low, LL lower low, LH lower high'
+showHighLowSwingsTooltip = 'Track the most important recent high and low. Strong = the level defended the trend and is harder to break. Weak = likely to be broken'
+showInternalOrderBlocksTooltip = 'Zones where concentrated buying or selling happened. Price often reacts when it returns to one\n\nNumber of zones to keep on the chart'
+showSwingOrderBlocksTooltip = 'Same idea as internal order blocks, but from the major swings — bigger, slower, more significant zones\n\nNumber of zones to keep on the chart'
+orderBlockFilterTooltip = 'How overly-volatile candles are filtered out of zone detection\n\nUse Cumulative Mean Range on charts with little price history'
+orderBlockMitigationTooltip = 'When a zone counts as used up: price wicking through it (High/Low) or fully closing through it (Close)'
+showEqualHighsLowsTooltip = 'Two highs (EQH) or two lows (EQL) at nearly the same price — the classic double-top / double-bottom pattern'
+equalHighsLowsLengthTooltip = 'How many bars apart the two highs/lows must be to count'
+equalHighsLowsThresholdTooltip = 'How close in price the two highs/lows must be\n\nLower values = fewer but more precise detections'
+showFairValueGapsTooltip = 'Gaps left behind by fast moves. Price often comes back later to "fill" them, which makes them useful targets'
+fairValueGapsThresholdTooltip = 'Only show the significant gaps, hide the tiny ones'
+fairValueGapsTimeframeTooltip = 'Detect gaps from a higher timeframe while you trade a lower one'
+fairValueGapsExtendTooltip = 'How many bars wide to draw each gap box'
+showPremiumDiscountZonesTooltip = 'Shows whether price is currently expensive (Premium), cheap (Discount), or fair (Equilibrium) within the active range — helps avoid buying tops and selling bottoms'
+
+// Smart Money Concepts input group
+modeInput = input.string(HISTORICAL, 'Mode', group = SMART_GROUP, tooltip = modeTooltip, options = [HISTORICAL, PRESENT], display = display.none)
+styleInput = input.string(COLORED, 'Style', group = SMART_GROUP, tooltip = styleTooltip, options = [COLORED, MONOCHROME], display = display.none)
+showTrendInput = input(false, 'Color Candles', group = SMART_GROUP, tooltip = showTrendTooltip, display = display.none)
+
+// Internal Structure input group
+showInternalsInput = input(true, 'Show Internal Structure', group = INTERNAL_GROUP, tooltip = showInternalsTooltip, display = display.none)
+showInternalBullInput = input.string(ALL, 'Bullish Structure', group = INTERNAL_GROUP, inline = 'ibull', options = [ALL, BOS, CHOCH], display = display.none)
+internalBullColorInput = input(GREEN, '', group = INTERNAL_GROUP, inline = 'ibull', display = display.none)
+showInternalBearInput = input.string(ALL, 'Bearish Structure', group = INTERNAL_GROUP, inline = 'ibear', options = [ALL, BOS, CHOCH], display = display.none)
+internalBearColorInput = input(RED, '', group = INTERNAL_GROUP, inline = 'ibear', display = display.none)
+internalFilterConfluenceInput = input(false, 'Confluence Filter', group = INTERNAL_GROUP, tooltip = internalFilterConfluenceTooltip, display = display.none)
+internalStructureSize = input.string(TINY, 'Internal Label Size', group = INTERNAL_GROUP, options = [TINY, SMALL, NORMAL], display = display.none)
+
+// Swing Structure input group
+showStructureInput = input(true, 'Show Swing Structure', group = SWING_GROUP, tooltip = showStructureTooltip, display = display.none)
+showSwingBullInput = input.string(ALL, 'Bullish Structure', group = SWING_GROUP, inline = 'bull', options = [ALL, BOS, CHOCH], display = display.none)
+swingBullColorInput = input(GREEN, '', group = SWING_GROUP, inline = 'bull', display = display.none)
+showSwingBearInput = input.string(ALL, 'Bearish Structure', group = SWING_GROUP, inline = 'bear', options = [ALL, BOS, CHOCH], display = display.none)
+swingBearColorInput = input(RED, '', group = SWING_GROUP, inline = 'bear', display = display.none)
+swingStructureSize = input.string(SMALL, 'Swing Label Size', group = SWING_GROUP, options = [TINY, SMALL, NORMAL], display = display.none)
+showSwingsInput = input(false, 'Show Swings Points', group = SWING_GROUP, tooltip = showSwingsTooltip, inline = 'swings', display = display.none)
+swingsLengthInput = input.int(50, '', group = SWING_GROUP, minval = 10, inline = 'swings', display = display.none)
+showHighLowSwingsInput = input(true, 'Show Strong/Weak High/Low', group = SWING_GROUP, tooltip = showHighLowSwingsTooltip, display = display.none)
+
+// Order Blocks input group
+showInternalOrderBlocksInput = input(true, 'Internal Order Blocks', group = BLOCKS_GROUP, tooltip = showInternalOrderBlocksTooltip, inline = 'iob', display = display.none)
+internalOrderBlocksSizeInput = input.int(5, '', group = BLOCKS_GROUP, minval = 1, maxval = 20, inline = 'iob', display = display.none)
+showSwingOrderBlocksInput = input(false, 'Swing Order Blocks', group = BLOCKS_GROUP, tooltip = showSwingOrderBlocksTooltip, inline = 'ob', display = display.none)
+swingOrderBlocksSizeInput = input.int(5, '', group = BLOCKS_GROUP, minval = 1, maxval = 20, inline = 'ob', display = display.none)
+orderBlockFilterInput = input.string('Atr', 'Order Block Filter', group = BLOCKS_GROUP, tooltip = orderBlockFilterTooltip, options = [ATR, RANGE], display = display.none)
+orderBlockMitigationInput = input.string(HIGHLOW, 'Order Block Mitigation', group = BLOCKS_GROUP, tooltip = orderBlockMitigationTooltip, options = [CLOSE, HIGHLOW], display = display.none)
+internalBullishOrderBlockColor = input.color(color.new(#3179f5, 80), 'Internal Bullish OB', group = BLOCKS_GROUP, display = display.none)
+internalBearishOrderBlockColor = input.color(color.new(#f77c80, 80), 'Internal Bearish OB', group = BLOCKS_GROUP, display = display.none)
+swingBullishOrderBlockColor = input.color(color.new(#1848cc, 80), 'Bullish OB', group = BLOCKS_GROUP, display = display.none)
+swingBearishOrderBlockColor = input.color(color.new(#b22833, 80), 'Bearish OB', group = BLOCKS_GROUP, display = display.none)
+
+// Equal Highs/Lows input group
+showEqualHighsLowsInput = input(true, 'Equal High/Low', group = EQUAL_GROUP, tooltip = showEqualHighsLowsTooltip, display = display.none)
+equalHighsLowsLengthInput = input.int(3, 'Bars Confirmation', group = EQUAL_GROUP, tooltip = equalHighsLowsLengthTooltip, minval = 1, display = display.none)
+equalHighsLowsThresholdInput = input.float(0.1, 'Threshold', group = EQUAL_GROUP, tooltip = equalHighsLowsThresholdTooltip, minval = 0, maxval = 0.5, step = 0.1, display = display.none)
+equalHighsLowsSizeInput = input.string(TINY, 'Label Size', group = EQUAL_GROUP, options = [TINY, SMALL, NORMAL], display = display.none)
+
+// Fair Value Gaps input group
+showFairValueGapsInput = input(false, 'Fair Value Gaps', group = GAPS_GROUP, tooltip = showFairValueGapsTooltip, display = display.none)
+fairValueGapsThresholdInput = input(true, 'Auto Threshold', group = GAPS_GROUP, tooltip = fairValueGapsThresholdTooltip, display = display.none)
+fairValueGapsTimeframeInput = input.timeframe('', 'Timeframe', group = GAPS_GROUP, tooltip = fairValueGapsTimeframeTooltip, display = display.none)
+fairValueGapsBullColorInput = input.color(color.new(#00ff68, 70), 'Bullish FVG', group = GAPS_GROUP, display = display.none)
+fairValueGapsBearColorInput = input.color(color.new(#ff0008, 70), 'Bearish FVG', group = GAPS_GROUP, display = display.none)
+fairValueGapsExtendInput = input.int(1, 'Extend FVG', group = GAPS_GROUP, tooltip = fairValueGapsExtendTooltip, minval = 0, display = display.none)
+
+// Levels input group
+showDailyLevelsInput = input(false, 'Daily', group = LEVELS_GROUP, inline = 'daily', display = display.none)
+dailyLevelsStyleInput = input.string(SOLID, '', group = LEVELS_GROUP, inline = 'daily', options = [SOLID, DASHED, DOTTED], display = display.none)
+dailyLevelsColorInput = input(BLUE, '', group = LEVELS_GROUP, inline = 'daily', display = display.none)
+showWeeklyLevelsInput = input(false, 'Weekly', group = LEVELS_GROUP, inline = 'weekly', display = display.none)
+weeklyLevelsStyleInput = input.string(SOLID, '', group = LEVELS_GROUP, inline = 'weekly', options = [SOLID, DASHED, DOTTED], display = display.none)
+weeklyLevelsColorInput = input(BLUE, '', group = LEVELS_GROUP, inline = 'weekly', display = display.none)
+showMonthlyLevelsInput = input(false, 'Monthly', group = LEVELS_GROUP, inline = 'monthly', display = display.none)
+monthlyLevelsStyleInput = input.string(SOLID, '', group = LEVELS_GROUP, inline = 'monthly', options = [SOLID, DASHED, DOTTED], display = display.none)
+monthlyLevelsColorInput = input(BLUE, '', group = LEVELS_GROUP, inline = 'monthly', display = display.none)
+
+// Zones input group
+showPremiumDiscountZonesInput = input(false, 'Premium/Discount Zones', group = ZONES_GROUP, tooltip = showPremiumDiscountZonesTooltip, display = display.none)
+premiumZoneColorInput = input.color(RED, 'Premium Zone', group = ZONES_GROUP, display = display.none)
+equilibriumZoneColorInput = input.color(GRAY, 'Equilibrium Zone', group = ZONES_GROUP, display = display.none)
+discountZoneColorInput = input.color(GREEN, 'Discount Zone', group = ZONES_GROUP, display = display.none)
+
+// =============================================================================
+// CUSTOM DATA STRUCTURES
+// =============================================================================
+
+// Alerts structure
+type alerts
+	bool internalBullishBOS = false
+	bool internalBearishBOS = false
+	bool internalBullishCHoCH = false
+	bool internalBearishCHoCH = false
+	bool swingBullishBOS = false
+	bool swingBearishBOS = false
+	bool swingBullishCHoCH = false
+	bool swingBearishCHoCH = false
+	bool internalBullishOrderBlock = false
+	bool internalBearishOrderBlock = false
+	bool swingBullishOrderBlock = false
+	bool swingBearishOrderBlock = false
+	bool equalHighs = false
+	bool equalLows = false
+	bool bullishFairValueGap = false
+	bool bearishFairValueGap = false
+
+// Trailing extremes structure
+type trailingExtremes
+	float top
+	float bottom
+	int barTime
+	int barIndex
+	int lastTopTime
+	int lastBottomTime
+
+// Fair Value Gap structure
+type fairValueGap
+	float top
+	float bottom
+	int bias
+	box topBox
+	box bottomBox
+
+// Trend bias structure
+type trend
+	int bias
+
+// Equal Highs/Lows display structure
+type equalDisplay
+	line l_ine = na
+	label l_abel = na
+
+// Pivot point structure 
+type pivot
+	float currentLevel
+	float lastLevel
+	bool crossed
+	int barTime = time
+	int barIndex = bar_index
+
+// Order Block structure
+type orderBlock
+	float barHigh
+	float barLow
+	int barTime
+	int bias
+
+// =============================================================================
+// INITIALIZE VARIABLES
+// =============================================================================
+
+// Pivot variables
+var pivot swingHigh = pivot.new(na, na, false)
+var pivot swingLow = pivot.new(na, na, false)
+var pivot internalHigh = pivot.new(na, na, false)
+var pivot internalLow = pivot.new(na, na, false)
+var pivot equalHigh = pivot.new(na, na, false)
+var pivot equalLow = pivot.new(na, na, false)
+
+// Trend variables
+var trend swingTrend = trend.new(0)
+var trend internalTrend = trend.new(0)
+
+// Display variables
+var equalDisplay equalHighDisplay = equalDisplay.new()
+var equalDisplay equalLowDisplay = equalDisplay.new()
+
+// Arrays
+var array<fairValueGap> fairValueGaps = array.new<fairValueGap>()
+var array<float> parsedHighs = array.new<float>()
+var array<float> parsedLows = array.new<float>()
+var array<float> highs = array.new<float>()
+var array<float> lows = array.new<float>()
+var array<int> times = array.new<int>()
+
+// Trailing extremes
+var trailingExtremes trailing = trailingExtremes.new()
+
+// Order blocks arrays
+var array<orderBlock> swingOrderBlocks = array.new<orderBlock>()
+var array<orderBlock> internalOrderBlocks = array.new<orderBlock>()
+var array<box> swingOrderBlocksBoxes = array.new<box>()
+var array<box> internalOrderBlocksBoxes = array.new<box>()
+
+// Colors
+var swingBullishColor = styleInput == MONOCHROME ? MONO_BULLISH : swingBullColorInput
+var swingBearishColor = styleInput == MONOCHROME ? MONO_BEARISH : swingBearColorInput
+var fairValueGapBullishColor = styleInput == MONOCHROME ? color.new(MONO_BULLISH, 70) : fairValueGapsBullColorInput
+var fairValueGapBearishColor = styleInput == MONOCHROME ? color.new(MONO_BEARISH, 70) : fairValueGapsBearColorInput
+var premiumZoneColor = styleInput == MONOCHROME ? MONO_BEARISH : premiumZoneColorInput
+var discountZoneColor = styleInput == MONOCHROME ? MONO_BULLISH : discountZoneColorInput
+
+// Bar index tracking
+varip int currentBarIndex = bar_index
+varip int lastBarIndex = bar_index
+
+// Alerts
+alerts currentAlerts = alerts.new()
+
+// Initial time
+var initialTime = time
+
+// Initialize order block boxes on first bar
+if barstate.isfirst
+    if showSwingOrderBlocksInput
+        for index = 1 to swingOrderBlocksSizeInput by 1
+            swingOrderBlocksBoxes.push(box.new(na, na, na, na, xloc = xloc.bar_time, extend = extend.right))
+    if showInternalOrderBlocksInput
+        for index = 1 to internalOrderBlocksSizeInput by 1
+            internalOrderBlocksBoxes.push(box.new(na, na, na, na, xloc = xloc.bar_time, extend = extend.right))
+
+// Order block mitigation sources
+bearishOrderBlockMitigationSource = orderBlockMitigationInput == CLOSE ? close : high
+bullishOrderBlockMitigationSource = orderBlockMitigationInput == CLOSE ? close : low
+
+// Volatility calculation
+atrMeasure = ta.atr(200)
+volatilityMeasure = orderBlockFilterInput == ATR ? atrMeasure : ta.cum(ta.tr) / bar_index
+highVolatilityBar = high - low >= 2 * volatilityMeasure
+parsedHigh = highVolatilityBar ? low : high
+parsedLow = highVolatilityBar ? high : low
+
+// Store current values
+parsedHighs.push(parsedHigh)
+parsedLows.push(parsedLow)
+highs.push(high)
+lows.push(low)
+times.push(time)
+
+// =============================================================================
+// HELPER FUNCTIONS
+// =============================================================================
+
+// Get current leg (bullish or bearish)
+leg(int size) =>
+    var leg = 0
+    newLegHigh = high[size] > ta.highest(size)
+    newLegLow = low[size] < ta.lowest(size)
+
+    if newLegHigh
+        leg := BEARISH_LEG
+        leg
+    else if newLegLow
+        leg := BULLISH_LEG
+        leg
+    leg
+
+// Leg and trend change detection functions
+startOfNewLeg(int leg) =>
+    ta.change(leg) != 0
+startOfBearishLeg(int leg) =>
+    ta.change(leg) == -1
+startOfBullishLeg(int leg) =>
+    ta.change(leg) == +1
+
+// Draw a label - CONVERTED TO SINGLE LINE
+drawLabel(int labelTime, float labelPrice, string tag, color labelColor, string labelStyle) =>
+    var label l_abel = na
+    if modeInput == PRESENT
+        l_abel.delete()
+    l_abel := label.new(chart.point.new(labelTime, na, labelPrice), tag, xloc.bar_time, color = color(na), textcolor = labelColor, style = labelStyle, size = size.small)
+    l_abel
+
+// Draw equal high/low - CONVERTED TO SINGLE LINE
+drawEqualHighLow(pivot p_ivot, float level, int size, bool equalHigh) =>
+    equalDisplay e_qualDisplay = equalHigh ? equalHighDisplay : equalLowDisplay
+
+    string tag = 'EQL'
+    color equalColor = swingBullishColor
+    string labelStyle = label.style_label_up
+
+    if equalHigh
+        tag := 'EQH'
+        equalColor := swingBearishColor
+        labelStyle := label.style_label_down
+        labelStyle
+
+    if modeInput == PRESENT
+        line.delete(e_qualDisplay.l_ine)
+        label.delete(e_qualDisplay.l_abel)
+
+    e_qualDisplay.l_ine := line.new(chart.point.new(p_ivot.barTime, na, p_ivot.currentLevel), chart.point.new(time[size], na, level), xloc = xloc.bar_time, color = equalColor, style = line.style_dotted)
+    labelPosition = math.round(0.5 * (p_ivot.barIndex + bar_index - size))
+    e_qualDisplay.l_abel := label.new(chart.point.new(na, labelPosition, level), tag, xloc.bar_index, color = color(na), textcolor = equalColor, style = labelStyle, size = equalHighsLowsSizeInput)
+    e_qualDisplay.l_abel
+
+// Get and process current structure
+getCurrentStructure(int size, bool equalHighLow = false, bool internal = false) =>
+    currentLeg = leg(size)
+    newPivot = startOfNewLeg(currentLeg)
+    pivotLow = startOfBullishLeg(currentLeg)
+    pivotHigh = startOfBearishLeg(currentLeg)
+
+    if newPivot
+        if pivotLow
+            pivot p_ivot = equalHighLow ? equalLow : internal ? internalLow : swingLow
+
+            if equalHighLow and math.abs(p_ivot.currentLevel - low[size]) < equalHighsLowsThresholdInput * atrMeasure
+                drawEqualHighLow(p_ivot, low[size], size, false)
+
+            p_ivot.lastLevel := p_ivot.currentLevel
+            p_ivot.currentLevel := low[size]
+            p_ivot.crossed := false
+            p_ivot.barTime := time[size]
+            p_ivot.barIndex := bar_index[size]
+
+            if not equalHighLow and not internal
+                trailing.bottom := p_ivot.currentLevel
+                trailing.barTime := p_ivot.barTime
+                trailing.barIndex := p_ivot.barIndex
+                trailing.lastBottomTime := p_ivot.barTime
+                trailing.lastBottomTime
+
+            if showSwingsInput and not internal and not equalHighLow
+                drawLabel(time[size], p_ivot.currentLevel, p_ivot.currentLevel < p_ivot.lastLevel ? 'LL' : 'HL', swingBullishColor, label.style_label_up)
+        else
+            pivot p_ivot = equalHighLow ? equalHigh : internal ? internalHigh : swingHigh
+
+            if equalHighLow and math.abs(p_ivot.currentLevel - high[size]) < equalHighsLowsThresholdInput * atrMeasure
+                drawEqualHighLow(p_ivot, high[size], size, true)
+
+            p_ivot.lastLevel := p_ivot.currentLevel
+            p_ivot.currentLevel := high[size]
+            p_ivot.crossed := false
+            p_ivot.barTime := time[size]
+            p_ivot.barIndex := bar_index[size]
+
+            if not equalHighLow and not internal
+                trailing.top := p_ivot.currentLevel
+                trailing.barTime := p_ivot.barTime
+                trailing.barIndex := p_ivot.barIndex
+                trailing.lastTopTime := p_ivot.barTime
+                trailing.lastTopTime
+
+            if showSwingsInput and not internal and not equalHighLow
+                drawLabel(time[size], p_ivot.currentLevel, p_ivot.currentLevel > p_ivot.lastLevel ? 'HH' : 'LH', swingBearishColor, label.style_label_down)
+
+// Draw structure - CONVERTED TO SINGLE LINE
+drawStructure(pivot p_ivot, string tag, color structureColor, string lineStyle, string labelStyle, string labelSize) =>
+    var line l_ine = line.new(na, na, na, na, xloc = xloc.bar_time)
+    var label l_abel = label.new(na, na)
+
+    if modeInput == PRESENT
+        l_ine.delete()
+        l_abel.delete()
+
+    l_ine := line.new(chart.point.new(p_ivot.barTime, na, p_ivot.currentLevel), chart.point.new(time, na, p_ivot.currentLevel), xloc.bar_time, color = structureColor, style = lineStyle)
+    l_abel := label.new(chart.point.new(na, math.round(0.5 * (p_ivot.barIndex + bar_index)), p_ivot.currentLevel), tag, xloc.bar_index, color = color(na), textcolor = structureColor, style = labelStyle, size = labelSize)
+    l_abel
+
+// Delete used order blocks
+deleteOrderBlocks(bool internal = false) =>
+    array<orderBlock> orderBlocks = internal ? internalOrderBlocks : swingOrderBlocks
+
+    for [index, eachOrderBlock] in orderBlocks
+        bool crossedOderBlock = false
+
+        if bearishOrderBlockMitigationSource > eachOrderBlock.barHigh and eachOrderBlock.bias == BEARISH
+            crossedOderBlock := true
+            if internal
+                currentAlerts.internalBearishOrderBlock := true
+                currentAlerts.internalBearishOrderBlock
+            else
+                currentAlerts.swingBearishOrderBlock := true
+                currentAlerts.swingBearishOrderBlock
+        else if bullishOrderBlockMitigationSource < eachOrderBlock.barLow and eachOrderBlock.bias == BULLISH
+            crossedOderBlock := true
+            if internal
+                currentAlerts.internalBullishOrderBlock := true
+                currentAlerts.internalBullishOrderBlock
+            else
+                currentAlerts.swingBullishOrderBlock := true
+                currentAlerts.swingBullishOrderBlock
+
+        if crossedOderBlock
+            orderBlocks.remove(index)
+
+// Store order blocks
+storeOrdeBlock(pivot p_ivot, bool internal = false, int bias) =>
+    if not internal and showSwingOrderBlocksInput or internal and showInternalOrderBlocksInput
+        array<float> a_rray = na
+        int parsedIndex = na
+
+        if bias == BEARISH
+            a_rray := parsedHighs.slice(p_ivot.barIndex, bar_index)
+            parsedIndex := p_ivot.barIndex + a_rray.indexof(a_rray.max())
+            parsedIndex
+        else
+            a_rray := parsedLows.slice(p_ivot.barIndex, bar_index)
+            parsedIndex := p_ivot.barIndex + a_rray.indexof(a_rray.min())
+            parsedIndex
+
+        orderBlock o_rderBlock = orderBlock.new(parsedHighs.get(parsedIndex), parsedLows.get(parsedIndex), times.get(parsedIndex), bias)
+        array<orderBlock> orderBlocks = internal ? internalOrderBlocks : swingOrderBlocks
+
+        if orderBlocks.size() >= 100
+            orderBlocks.pop()
+
+        orderBlocks.unshift(o_rderBlock)
+
+// Draw order blocks
+drawOrderBlocks(bool internal = false) =>
+    array<orderBlock> orderBlocks = internal ? internalOrderBlocks : swingOrderBlocks
+    orderBlocksSize = orderBlocks.size()
+
+    if orderBlocksSize > 0
+        maxOrderBlocks = internal ? internalOrderBlocksSizeInput : swingOrderBlocksSizeInput
+        array<orderBlock> parsedOrdeBlocks = orderBlocks.slice(0, math.min(maxOrderBlocks, orderBlocksSize))
+        array<box> b_oxes = internal ? internalOrderBlocksBoxes : swingOrderBlocksBoxes
+
+        for [index, eachOrderBlock] in parsedOrdeBlocks
+            orderBlockColor = styleInput == MONOCHROME ? eachOrderBlock.bias == BEARISH ? color.new(MONO_BEARISH, 80) : color.new(MONO_BULLISH, 80) : internal ? eachOrderBlock.bias == BEARISH ? internalBearishOrderBlockColor : internalBullishOrderBlockColor : eachOrderBlock.bias == BEARISH ? swingBearishOrderBlockColor : swingBullishOrderBlockColor
+
+            box b_ox = b_oxes.get(index)
+            b_ox.set_top_left_point(chart.point.new(eachOrderBlock.barTime, na, eachOrderBlock.barHigh))
+            b_ox.set_bottom_right_point(chart.point.new(last_bar_time, na, eachOrderBlock.barLow))
+            b_ox.set_border_color(internal ? na : orderBlockColor)
+            b_ox.set_bgcolor(orderBlockColor)
+
+// Display structure and detect order blocks
+displayStructure(bool internal = false) =>
+    var bullishBar = true
+    var bearishBar = true
+
+    if internalFilterConfluenceInput
+        bullishBar := high - math.max(close, open) > math.min(close, open - low)
+        bearishBar := high - math.max(close, open) < math.min(close, open - low)
+        bearishBar
+
+    pivot p_ivot = internal ? internalHigh : swingHigh
+    trend t_rend = internal ? internalTrend : swingTrend
+    lineStyle = internal ? line.style_dashed : line.style_solid
+    labelSize = internal ? internalStructureSize : swingStructureSize
+    extraCondition = internal ? internalHigh.currentLevel != swingHigh.currentLevel and bullishBar : true
+    bullishColor = styleInput == MONOCHROME ? MONO_BULLISH : internal ? internalBullColorInput : swingBullColorInput
+
+    if ta.crossover(close, p_ivot.currentLevel) and not p_ivot.crossed and extraCondition
+        string tag = t_rend.bias == BEARISH ? CHOCH : BOS
+
+        if internal
+            currentAlerts.internalBullishCHoCH := tag == CHOCH
+            currentAlerts.internalBullishBOS := tag == BOS
+            currentAlerts.internalBullishBOS
+        else
+            currentAlerts.swingBullishCHoCH := tag == CHOCH
+            currentAlerts.swingBullishBOS := tag == BOS
+            currentAlerts.swingBullishBOS
+
+        p_ivot.crossed := true
+        t_rend.bias := BULLISH
+
+        displayCondition = internal ? showInternalsInput and (showInternalBullInput == ALL or showInternalBullInput == BOS and tag != CHOCH or showInternalBullInput == CHOCH and tag == CHOCH) : showStructureInput and (showSwingBullInput == ALL or showSwingBullInput == BOS and tag != CHOCH or showSwingBullInput == CHOCH and tag == CHOCH)
+
+        if displayCondition
+            drawStructure(p_ivot, tag, bullishColor, lineStyle, label.style_label_down, labelSize)
+
+        if internal and showInternalOrderBlocksInput or not internal and showSwingOrderBlocksInput
+            storeOrdeBlock(p_ivot, internal, BULLISH)
+
+    // Handle bearish structure
+    p_ivot := internal ? internalLow : swingLow
+    extraCondition := internal ? internalLow.currentLevel != swingLow.currentLevel and bearishBar : true
+    bearishColor = styleInput == MONOCHROME ? MONO_BEARISH : internal ? internalBearColorInput : swingBearColorInput
+
+    if ta.crossunder(close, p_ivot.currentLevel) and not p_ivot.crossed and extraCondition
+        string tag = t_rend.bias == BULLISH ? CHOCH : BOS
+
+        if internal
+            currentAlerts.internalBearishCHoCH := tag == CHOCH
+            currentAlerts.internalBearishBOS := tag == BOS
+            currentAlerts.internalBearishBOS
+        else
+            currentAlerts.swingBearishCHoCH := tag == CHOCH
+            currentAlerts.swingBearishBOS := tag == BOS
+            currentAlerts.swingBearishBOS
+
+        p_ivot.crossed := true
+        t_rend.bias := BEARISH
+
+        displayCondition = internal ? showInternalsInput and (showInternalBearInput == ALL or showInternalBearInput == BOS and tag != CHOCH or showInternalBearInput == CHOCH and tag == CHOCH) : showStructureInput and (showSwingBearInput == ALL or showSwingBearInput == BOS and tag != CHOCH or showSwingBearInput == CHOCH and tag == CHOCH)
+
+        if displayCondition
+            drawStructure(p_ivot, tag, bearishColor, lineStyle, label.style_label_up, labelSize)
+
+        if internal and showInternalOrderBlocksInput or not internal and showSwingOrderBlocksInput
+            storeOrdeBlock(p_ivot, internal, BEARISH)
+
+// Create fair value gap box - CONVERTED TO SINGLE LINE
+fairValueGapBox(leftTime, rightTime, topPrice, bottomPrice, boxColor) =>
+    box.new(chart.point.new(leftTime, na, topPrice), chart.point.new(rightTime + fairValueGapsExtendInput * (time - time[1]), na, bottomPrice), xloc = xloc.bar_time, border_color = boxColor, bgcolor = boxColor)
+
+// Delete fair value gaps
+deleteFairValueGaps() =>
+    for [index, eachFairValueGap] in fairValueGaps
+        if low < eachFairValueGap.bottom and eachFairValueGap.bias == BULLISH or high > eachFairValueGap.top and eachFairValueGap.bias == BEARISH
+            eachFairValueGap.topBox.delete()
+            eachFairValueGap.bottomBox.delete()
+            fairValueGaps.remove(index)
+
+// Draw fair value gaps - CONVERTED TO SINGLE LINE
+drawFairValueGaps() =>
+    [lastClose, lastOpen, lastTime, currentHigh, currentLow, currentTime, last2High, last2Low] = request.security(syminfo.tickerid, fairValueGapsTimeframeInput, [close[1], open[1], time[1], high[0], low[0], time[0], high[2], low[2]], lookahead = barmerge.lookahead_on)
+
+    barDeltaPercent = (lastClose - lastOpen) / (lastOpen * 100)
+    newTimeframe = timeframe.change(fairValueGapsTimeframeInput)
+    threshold = fairValueGapsThresholdInput ? ta.cum(math.abs(newTimeframe ? barDeltaPercent : 0)) / bar_index * 2 : 0
+
+    bullishFairValueGap = currentLow > last2High and lastClose > last2High and barDeltaPercent > threshold and newTimeframe
+    bearishFairValueGap = currentHigh < last2Low and lastClose < last2Low and -barDeltaPercent > threshold and newTimeframe
+
+    if bullishFairValueGap
+        currentAlerts.bullishFairValueGap := true
+        fairValueGaps.unshift(fairValueGap.new(currentLow, last2High, BULLISH, fairValueGapBox(lastTime, currentTime, currentLow, math.avg(currentLow, last2High), fairValueGapBullishColor), fairValueGapBox(lastTime, currentTime, math.avg(currentLow, last2High), last2High, fairValueGapBullishColor)))
+
+    if bearishFairValueGap
+        currentAlerts.bearishFairValueGap := true
+        fairValueGaps.unshift(fairValueGap.new(currentHigh, last2Low, BEARISH, fairValueGapBox(lastTime, currentTime, currentHigh, math.avg(currentHigh, last2Low), fairValueGapBearishColor), fairValueGapBox(lastTime, currentTime, math.avg(currentHigh, last2Low), last2Low, fairValueGapBearishColor)))
+
+// Get line style from string
+getStyle(string style) =>
+    switch style
+        SOLID => line.style_solid
+        DASHED => line.style_dashed
+        DOTTED => line.style_dotted
+
+// Draw MultiTimeFrame levels - CONVERTED TO SINGLE LINE
+drawLevels(string timeframe, bool sameTimeframe, string style, color levelColor) =>
+    [topLevel, bottomLevel, leftTime, rightTime] = request.security(syminfo.tickerid, timeframe, [high[1], low[1], time[1], time], lookahead = barmerge.lookahead_on)
+
+    float parsedTop = sameTimeframe ? high : topLevel
+    float parsedBottom = sameTimeframe ? low : bottomLevel
+    int parsedLeftTime = sameTimeframe ? time : leftTime
+    int parsedRightTime = sameTimeframe ? time : rightTime
+    int parsedTopTime = time
+    int parsedBottomTime = time
+
+    if not sameTimeframe
+        int leftIndex = times.binary_search_rightmost(parsedLeftTime)
+        int rightIndex = times.binary_search_rightmost(parsedRightTime)
+        array<int> timeArray = times.slice(leftIndex, rightIndex)
+        array<float> topArray = highs.slice(leftIndex, rightIndex)
+        array<float> bottomArray = lows.slice(leftIndex, rightIndex)
+        parsedTopTime := timeArray.size() > 0 ? timeArray.get(topArray.indexof(topArray.max())) : initialTime
+        parsedBottomTime := timeArray.size() > 0 ? timeArray.get(bottomArray.indexof(bottomArray.min())) : initialTime
+        parsedBottomTime
+
+    var line topLine = line.new(na, na, na, na, xloc = xloc.bar_time, color = levelColor, style = getStyle(style))
+    var line bottomLine = line.new(na, na, na, na, xloc = xloc.bar_time, color = levelColor, style = getStyle(style))
+    var label topLabel = label.new(na, na, xloc = xloc.bar_time, text = str.format('P{0}H', timeframe), color = color(na), textcolor = levelColor, size = size.small, style = label.style_label_left)
+    var label bottomLabel = label.new(na, na, xloc = xloc.bar_time, text = str.format('P{0}L', timeframe), color = color(na), textcolor = levelColor, size = size.small, style = label.style_label_left)
+
+    topLine.set_first_point(chart.point.new(parsedTopTime, na, parsedTop))
+    topLine.set_second_point(chart.point.new(last_bar_time + 20 * (time - time[1]), na, parsedTop))
+    topLabel.set_point(chart.point.new(last_bar_time + 20 * (time - time[1]), na, parsedTop))
+
+    bottomLine.set_first_point(chart.point.new(parsedBottomTime, na, parsedBottom))
+    bottomLine.set_second_point(chart.point.new(last_bar_time + 20 * (time - time[1]), na, parsedBottom))
+    bottomLabel.set_point(chart.point.new(last_bar_time + 20 * (time - time[1]), na, parsedBottom))
+
+// Check if chart timeframe is higher than provided timeframe
+higherTimeframe(string timeframe) =>
+    timeframe.in_seconds() > timeframe.in_seconds(timeframe)
+
+// Update trailing swing points
+updateTrailingExtremes() =>
+    trailing.top := math.max(high, trailing.top)
+    trailing.lastTopTime := trailing.top == high ? time : trailing.lastTopTime
+    trailing.bottom := math.min(low, trailing.bottom)
+    trailing.lastBottomTime := trailing.bottom == low ? time : trailing.lastBottomTime
+    trailing.lastBottomTime
+
+// Draw trailing swing points (high/low) - CONVERTED TO SINGLE LINE
+drawHighLowSwings() =>
+    var line topLine = line.new(na, na, na, na, color = swingBearishColor, xloc = xloc.bar_time)
+    var line bottomLine = line.new(na, na, na, na, color = swingBullishColor, xloc = xloc.bar_time)
+    var label topLabel = label.new(na, na, color = color(na), textcolor = swingBearishColor, xloc = xloc.bar_time, style = label.style_label_down, size = size.tiny)
+    var label bottomLabel = label.new(na, na, color = color(na), textcolor = swingBullishColor, xloc = xloc.bar_time, style = label.style_label_up, size = size.tiny)
+
+    rightTimeBar = last_bar_time + 20 * (time - time[1])
+
+    topLine.set_first_point(chart.point.new(trailing.lastTopTime, na, trailing.top))
+    topLine.set_second_point(chart.point.new(rightTimeBar, na, trailing.top))
+    topLabel.set_point(chart.point.new(rightTimeBar, na, trailing.top))
+    topLabel.set_text(swingTrend.bias == BEARISH ? 'Strong High' : 'Weak High')
+
+    bottomLine.set_first_point(chart.point.new(trailing.lastBottomTime, na, trailing.bottom))
+    bottomLine.set_second_point(chart.point.new(rightTimeBar, na, trailing.bottom))
+    bottomLabel.set_point(chart.point.new(rightTimeBar, na, trailing.bottom))
+    bottomLabel.set_text(swingTrend.bias == BULLISH ? 'Strong Low' : 'Weak Low')
+
+// Draw a zone (for premium/discount zones) - CONVERTED TO SINGLE LINE
+drawZone(float labelLevel, int labelIndex, float top, float bottom, string tag, color zoneColor, string style) =>
+    var label l_abel = label.new(na, na, text = tag, color = color(na), textcolor = zoneColor, style = style, size = size.small)
+    var box b_ox = box.new(na, na, na, na, bgcolor = color.new(zoneColor, 80), border_color = color(na), xloc = xloc.bar_time)
+
+    b_ox.set_top_left_point(chart.point.new(trailing.barTime, na, top))
+    b_ox.set_bottom_right_point(chart.point.new(last_bar_time, na, bottom))
+    l_abel.set_point(chart.point.new(na, labelIndex, labelLevel))
+
+// Draw premium/discount zones
+drawPremiumDiscountZones() =>
+    // Premium zone
+    drawZone(trailing.top, math.round(0.5 * (trailing.barIndex + last_bar_index)), trailing.top, 0.95 * trailing.top + 0.05 * trailing.bottom, 'Premium', premiumZoneColor, label.style_label_down)
+
+    // Equilibrium zone
+    equilibriumLevel = math.avg(trailing.top, trailing.bottom)
+    drawZone(equilibriumLevel, last_bar_index, 0.525 * trailing.top + 0.475 * trailing.bottom, 0.525 * trailing.bottom + 0.475 * trailing.top, 'Equilibrium', equilibriumZoneColorInput, label.style_label_left)
+
+    // Discount zone
+    drawZone(trailing.bottom, math.round(0.5 * (trailing.barIndex + last_bar_index)), 0.95 * trailing.bottom + 0.05 * trailing.top, trailing.bottom, 'Discount', discountZoneColor, label.style_label_up)
+
+// =============================================================================
+// MAIN EXECUTION
+// =============================================================================
+
+// Colored candles based on trend
+parsedOpen = showTrendInput ? open : na
+candleColor = internalTrend.bias == BULLISH ? swingBullishColor : swingBearishColor
+plotcandle(parsedOpen, high, low, close, color = candleColor, wickcolor = candleColor, bordercolor = candleColor, display = display.pane)
+
+// Handle high/low swings and premium/discount zones
+if showHighLowSwingsInput or showPremiumDiscountZonesInput
+    updateTrailingExtremes()
+
+    if showHighLowSwingsInput
+        drawHighLowSwings()
+
+    if showPremiumDiscountZonesInput
+        drawPremiumDiscountZones()
+
+// Handle fair value gaps
+if showFairValueGapsInput
+    deleteFairValueGaps()
+
+// Get current market structure
+getCurrentStructure(swingsLengthInput, false)
+getCurrentStructure(5, false, true)
+
+if showEqualHighsLowsInput
+    getCurrentStructure(equalHighsLowsLengthInput, true)
+
+// Display internal structure and handle internal order blocks
+if showInternalsInput or showInternalOrderBlocksInput or showTrendInput
+    displayStructure(true)
+
+// Display swing structure and handle swing order blocks
+if showStructureInput or showSwingOrderBlocksInput or showHighLowSwingsInput
+    displayStructure()
+
+// Handle order blocks
+if showInternalOrderBlocksInput
+    deleteOrderBlocks(true)
+
+if showSwingOrderBlocksInput
+    deleteOrderBlocks()
+
+// Draw fair value gaps if needed
+if showFairValueGapsInput
+    drawFairValueGaps()
+
+// Draw order blocks on last bar
+if barstate.islastconfirmedhistory or barstate.islast
+    if showInternalOrderBlocksInput
+        drawOrderBlocks(true)
+
+    if showSwingOrderBlocksInput
+        drawOrderBlocks()
+
+// Track bar changes and draw MTF levels
+lastBarIndex := currentBarIndex
+currentBarIndex := bar_index
+newBar = currentBarIndex != lastBarIndex
+
+if barstate.islastconfirmedhistory or barstate.isrealtime and newBar
+    if showDailyLevelsInput and not higherTimeframe('D')
+        drawLevels('D', timeframe.isdaily, dailyLevelsStyleInput, dailyLevelsColorInput)
+
+    if showWeeklyLevelsInput and not higherTimeframe('W')
+        drawLevels('W', timeframe.isweekly, weeklyLevelsStyleInput, weeklyLevelsColorInput)
+
+    if showMonthlyLevelsInput and not higherTimeframe('M')
+        drawLevels('M', timeframe.ismonthly, monthlyLevelsStyleInput, monthlyLevelsColorInput)
+
+// =============================================================================
+// ALERTS CONFIGURATION
+// =============================================================================
+alertcondition(currentAlerts.internalBullishBOS, 'Internal Bullish BOS', 'Internal Bullish BOS formed — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(currentAlerts.internalBullishCHoCH, 'Internal Bullish CHoCH', 'Internal Bullish CHoCH formed — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(currentAlerts.internalBearishBOS, 'Internal Bearish BOS', 'Internal Bearish BOS formed — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(currentAlerts.internalBearishCHoCH, 'Internal Bearish CHoCH', 'Internal Bearish CHoCH formed — {{ticker}} · {{interval}} · Price {{close}}')
+
+alertcondition(currentAlerts.swingBullishBOS, 'Bullish BOS', 'Bullish BOS formed — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(currentAlerts.swingBullishCHoCH, 'Bullish CHoCH', 'Bullish CHoCH formed — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(currentAlerts.swingBearishBOS, 'Bearish BOS', 'Bearish BOS formed — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(currentAlerts.swingBearishCHoCH, 'Bearish CHoCH', 'Bearish CHoCH formed — {{ticker}} · {{interval}} · Price {{close}}')
+
+alertcondition(currentAlerts.internalBullishOrderBlock, 'Bullish Internal OB Breakout', 'Price broke bullish internal OB — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(currentAlerts.internalBearishOrderBlock, 'Bearish Internal OB Breakout', 'Price broke bearish internal OB — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(currentAlerts.swingBullishOrderBlock, 'Bullish Swing OB Breakout', 'Price broke bullish swing OB — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(currentAlerts.swingBearishOrderBlock, 'Bearish Swing OB Breakout', 'Price broke bearish swing OB — {{ticker}} · {{interval}} · Price {{close}}')
+
+alertcondition(currentAlerts.equalHighs, 'Equal Highs', 'Equal highs detected — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(currentAlerts.equalLows, 'Equal Lows', 'Equal lows detected — {{ticker}} · {{interval}} · Price {{close}}')
+
+alertcondition(currentAlerts.bullishFairValueGap, 'Bullish FVG', 'Bullish FVG formed — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(currentAlerts.bearishFairValueGap, 'Bearish FVG', 'Bearish FVG formed — {{ticker}} · {{interval}} · Price {{close}}')
+
+// =============================================================================
+// SECTION 3: PHANTOM OSCILLATOR - MA SHIFT MODULE
+// =============================================================================
+oscGroup = 'Phantom Oscillator'
+showOscillator = input.bool(false, 'Show Oscillator Columns', group = oscGroup, tooltip = 'Draw the momentum columns along the bottom of the chart — teal when momentum is building up, yellow/orange when it is fading', display = display.none)
+oscShowMA = input.bool(true, 'Show MA Line', group = oscGroup, tooltip = 'The moving average the oscillator measures momentum against', display = display.none)
+oscBarColoring = input.bool(true, 'Color Candles by Momentum', group = oscGroup, tooltip = 'Tint candles with the oscillator trend colors — the classic Phantom Flow look. Turn off to keep your own chart candle colors', display = display.none)
+
+// Oscillator settings
+oscTypeMA = input.string('SMA', 'MA Type', options = ['SMA', 'EMA', 'SMMA (RMA)', 'WMA', 'VWMA'], group = oscGroup, tooltip = 'The kind of moving average momentum is measured against', display = display.none)
+oscLength = input.int(40, 'MA Length', group = oscGroup, tooltip = 'How many bars the moving average covers. Higher = slower, steadier', display = display.none)
+oscSource = input.source(hl2, 'Source', group = oscGroup, tooltip = 'The price value used for the calculation', display = display.none)
+oscLen = input.int(15, 'Oscillator Length', group = oscGroup, inline = 'osc', display = display.none)
+oscThreshold = input.float(0.5, 'Threshold', step = 0.1, group = oscGroup, inline = 'osc', tooltip = 'Oscillator speed, signal threshold, and the diamond signal markers. Diamonds appear when momentum turns from a stretched level — early reversal hints', display = display.none)
+oscCrossEnabled = input.bool(true, 'Show Signals', group = oscGroup, inline = 'osc', display = display.none)
+showComboSignals = input.bool(true, 'Show Confluence Stars', group = oscGroup, tooltip = 'Marks the rare bars where Phantom Shift AND the Oscillator fire together — the strongest signal Core can give. These same moments power the Phantom Combo alerts', display = display.none)
+
+// Oscillator colors
+oscColorUp1 = input.color(#1dd1c2, 'Up Fast', inline = 'c', group = 'Oscillator Colors', display = display.none)
+oscColorUp2 = input.color(#17a297, 'Up Slow', inline = 'c', group = 'Oscillator Colors', display = display.none)
+oscColorDn1 = input.color(color.yellow, 'Down Fast', inline = 'c', group = 'Oscillator Colors', display = display.none)
+oscColorDn2 = input.color(color.orange, 'Down Slow', inline = 'c', group = 'Oscillator Colors', display = display.none)
+
+// Get the appropriate Moving Average
+getMA(src, len, type) =>
+    switch type
+        'SMA' => ta.sma(src, len)
+        'EMA' => ta.ema(src, len)
+        'SMMA (RMA)' => ta.rma(src, len)
+        'WMA' => ta.wma(src, len)
+        'VWMA' => ta.vwma(src, len)
+
+// Calculate oscillator
+maBase = getMA(oscSource, oscLength, oscTypeMA)
+maColor = oscSource >= maBase ? oscColorUp2 : oscColorDn2
+
+oscDiff = oscSource - maBase
+oscRange = ta.percentile_linear_interpolation(oscDiff, 1000, 99)
+osc = ta.hma(ta.change(oscDiff / oscRange, oscLen), 10)
+oscCol = osc > 0 ? osc > osc[1] ? oscColorUp1 : oscColorUp2 : osc < osc[1] ? oscColorDn1 : oscColorDn2
+
+// Plot base MA
+plot(oscShowMA ? maBase : na, 'Phantom MA Base', color = maColor, linewidth = 2, display = display.all - display.status_line)
+
+// Oscillator columns
+plot(showOscillator ? osc : na, 'Phantom Oscillator', style = plot.style_columns, color = color.new(oscCol, 80), display = display.all - display.status_line)
+
+// Signal markers
+sigUp = oscCrossEnabled and ta.crossover(osc, osc[2]) and osc < -oscThreshold
+sigDn = oscCrossEnabled and ta.crossunder(osc, osc[2]) and osc > oscThreshold
+
+plotshape(sigUp, title = 'Phantom Osc Buy', location = location.belowbar, style = shape.diamond, color = oscColorUp1, size = size.tiny, display = display.pane)
+plotshape(sigDn, title = 'Phantom Osc Sell', location = location.abovebar, style = shape.diamond, color = oscColorDn1, size = size.tiny, display = display.pane)
+
+// Combo Confluence — the rare bars where BOTH modules agree. Shown on chart
+// as stars (Core's strongest signal) and available as the Phantom Combo alerts.
+comboBuy = shiftBuy and sigUp
+comboSell = shiftSell and sigDn
+
+plotchar(showComboSignals and comboBuy, 'Confluence Buy', '★', location.belowbar, color.new(#089981, 0), size = size.tiny, display = display.pane)
+plotchar(showComboSignals and comboSell, 'Confluence Sell', '★', location.abovebar, color.new(#F23645, 0), size = size.tiny, display = display.pane)
+alertcondition(comboBuy, title = 'Phantom Combo Buy', message = 'Confluence: Phantom Shift + Oscillator Buy — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(comboSell, title = 'Phantom Combo Sell', message = 'Confluence: Phantom Shift + Oscillator Sell — {{ticker}} · {{interval}} · Price {{close}}')
+
+// Candlestick coloring based on oscillator trend (user-controllable; default
+// on preserves the classic Phantom Flow chart look)
+oscTrendColor = osc > 0 ? osc > osc[1] ? oscColorUp1 : oscColorUp2 : osc < osc[1] ? oscColorDn1 : oscColorDn2
+
+barcolor(oscBarColoring ? oscTrendColor : na, title = 'Oscillator Trend Bar Color')
+
+
+// Oscillator alerts
+alertcondition(sigUp, title = 'Phantom Oscillator Buy', message = 'Phantom Oscillator Buy Signal — {{ticker}} · {{interval}} · Price {{close}}')
+alertcondition(sigDn, title = 'Phantom Oscillator Sell', message = 'Phantom Oscillator Sell Signal — {{ticker}} · {{interval}} · Price {{close}}')
+
+// =============================================================================
+// PRO UPGRADE
+// Declared last so the group sits at the BOTTOM of the settings panel —
+// the product comes first, the upsell stays out of the way.
+// =============================================================================
+proUpgradeGroup = 'Pro Upgrade - getphantomflow.com/upgrade'
+showProUpgrade = input.bool(true, 'Show Upgrade Link on Chart', group = proUpgradeGroup, display = display.none)
+
+if barstate.islast and showProUpgrade
+    var table proTable = table.new(position.bottom_right, 1, 1)
+
+    table.cell(proTable, 0, 0,
+         '⬆ Upgrade to Pro',
+         bgcolor = color.new(color.gray, 92),
+         text_color = color.new(color.gray, 30),
+         text_size = size.tiny,
+         tooltip = 'Phantom Flow Pro adds:\n• Live market dashboard (sentiment, volatility, risk)\n• Phantom Power Levels — auto support/resistance zones\n• Session Filter — signals only during your trading hours\n• Alert controls: confirmed-bars-only + sensitivity\n• Dark mode & full color customization\n\ngetphantomflow.com/upgrade')

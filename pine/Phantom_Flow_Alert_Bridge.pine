@@ -1,0 +1,93 @@
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © darup67
+
+//@version=6
+// =============================================================================
+// Phantom Flow Alert Bridge
+// -----------------------------------------------------------------------------
+// Phantom Flow Core is a protected script — its source cannot be edited. But it
+// PLOTS its signals, and any plot can be consumed by another script through
+// input.source(). This bridge reads those plots, tracks buy/sell state, and
+// fires a structured alert only on a genuine flip.
+//
+// SETUP (order matters):
+//   1. Phantom Flow Core must already be on the chart.
+//   2. Add this script.
+//   3. In its settings, set "Buy signal plot"  -> Phantom Flow Core: Confluence Buy
+//                          "Sell signal plot" -> Phantom Flow Core: Confluence Sell
+//      (or the Phantom Osc Buy/Sell pair — whichever you actually trade)
+//   4. Right-click chart -> Add alert -> Condition: this script
+//      -> "Any alert() function call" -> Notifications: app + email/webhook
+// =============================================================================
+
+indicator("Phantom Flow Alert Bridge", overlay = true)
+
+// --- wiring ------------------------------------------------------------------
+buySrc  = input.source(close, "Buy signal plot",  group = "Wiring",
+     tooltip = "Point at Phantom Flow Core's Confluence Buy (or Osc Buy) plot.")
+sellSrc = input.source(close, "Sell signal plot", group = "Wiring",
+     tooltip = "Point at Phantom Flow Core's Confluence Sell (or Osc Sell) plot.")
+
+// A plot is 'firing' when it is non-na and above this. Phantom Flow emits 0.00
+// when idle, so any positive value is a signal. Raise it if your plot carries a
+// magnitude rather than a flag.
+thresh = input.float(0.0, "Signal threshold", minval = 0, group = "Wiring")
+
+// --- behavior ----------------------------------------------------------------
+alertFirst = input.bool(true, "Alert on the first signal too", group = "Behavior",
+     tooltip = "Off = only alert on buy->sell and sell->buy, never on the initial entry into a state.")
+onClose    = input.bool(true, "Confirm on bar close", group = "Behavior",
+     tooltip = "On = wait for the bar to close (no repaint, slower). Off = fire intrabar (faster, can repaint).")
+
+// --- state machine -----------------------------------------------------------
+// 1 = long/buy, -1 = short/sell, 0 = no signal seen yet.
+var int state = 0
+
+buyFire  = not na(buySrc)  and buySrc  > thresh
+sellFire = not na(sellSrc) and sellSrc > thresh
+
+// Both firing on one bar is ambiguous; hold the existing state rather than guess.
+newState = buyFire and sellFire ? state : buyFire ? 1 : sellFire ? -1 : state
+
+isFlip  = newState != state and state != 0
+isFirst = newState != 0 and state == 0
+shouldAlert = isFlip or (alertFirst and isFirst)
+
+// --- fire --------------------------------------------------------------------
+// JSON so a webhook consumer can parse it without string surgery. TradingView's
+// own app/email notification shows it as-is, which is still readable.
+dirTxt   = newState == 1 ? "BUY" : "SELL"
+fromTxt  = state == 1 ? "BUY" : state == -1 ? "SELL" : "NONE"
+msg = '{"ticker":"' + syminfo.ticker +
+      '","exchange":"' + syminfo.prefix +
+      '","tf":"' + timeframe.period +
+      '","from":"' + fromTxt +
+      '","to":"' + dirTxt +
+      '","price":' + str.tostring(close, format.mintick) +
+      '","time":"' + str.format_time(time_close, "yyyy-MM-dd HH:mm:ss", syminfo.timezone) + '"}'
+
+freq = onClose ? alert.freq_once_per_bar_close : alert.freq_once_per_bar
+
+if shouldAlert
+    alert(msg, freq)
+
+// Commit the state only once the bar is confirmed, so intrabar wobble does not
+// permanently advance the machine and swallow the real flip.
+if barstate.isconfirmed or not onClose
+    state := newState
+
+// --- visuals -----------------------------------------------------------------
+plotshape(shouldAlert and newState == 1,  title = "Flip to Buy",  style = shape.labelup,
+     location = location.belowbar, color = color.new(color.teal, 0),
+     text = "BUY",  textcolor = color.white, size = size.tiny)
+plotshape(shouldAlert and newState == -1, title = "Flip to Sell", style = shape.labeldown,
+     location = location.abovebar, color = color.new(color.red, 0),
+     text = "SELL", textcolor = color.white, size = size.tiny)
+
+// Exposed so downstream scripts (or the MCP data window) can read current state.
+plot(state, title = "State", display = display.data_window)
+
+// alertcondition gives you the classic per-condition alert dropdown as well as
+// the alert() path above. Either is fine; alert() carries the richer message.
+alertcondition(newState == 1  and newState != state, title = "Flip to BUY",  message = "Phantom Flow: flip to BUY")
+alertcondition(newState == -1 and newState != state, title = "Flip to SELL", message = "Phantom Flow: flip to SELL")
