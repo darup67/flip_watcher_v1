@@ -190,6 +190,27 @@ before any are dropped.
 Verified: a below-threshold flip is held back while state still advances to the
 new regime; a mixed poll alerts 3 and holds 2.
 
+### Conviction in the title
+
+The banner title now leads with the tier: **🔥 STRONG**, **⚡ MODERATE**. WEAK
+never appears — those are filtered out upstream and never reach a title.
+
+```
+⚡ ⬆️ LINKUSD → BUY
+🔥 ⬇️3 TQQQ SOXL MU
+🔥 ⬇️1 TQQQ  ⬆️1 SQQQ
+```
+
+This is not decoration. Previews are off on this Mac, so notification **bodies
+never render** — the title is the entire visible payload. Before this, a
+borderline MODERATE and a 5/5 STRONG produced identical banners, so the
+conviction score existed but was invisible exactly where it would be acted on.
+
+On a mixed poll the icon reports the **best** flip present, since that is the one
+deciding whether the banner is worth interrupting for; the body still scores
+every flip individually. The icon is charged against the fixed title budget, so
+a long ticker list loses a name to `+N` rather than being truncated by macOS.
+
 The score appears in:
 - **Email body** — full breakdown with factors
 - **Speech** — "…strong setup." / "…weak setup."
