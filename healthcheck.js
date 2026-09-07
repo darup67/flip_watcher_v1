@@ -535,17 +535,25 @@ function checkKalshiWatchlist() {
 
     // A muted channel is a deliberate choice, but an invisible one is
     // indistinguishable from a broken one three weeks later. Say it out loud.
-    const a = { banner: true, sound: true, speak: true, email: true, ...(w.alerts || {}) };
-    const muted = Object.entries(a).filter(([, on]) => !on).map(([k]) => k);
-    const mutedNote = muted.length ? ` · MUTED: ${muted.join(', ')}` : '';
+    const CH = { banner: true, sound: true, speak: true, email: true };
+    const a  = { ...CH, ...(w.alerts || {}) };
+    const va = { ...CH, ...(w.volAlerts || {}) };
+    const paused  = !!w.signals_paused;
+    const volLive = Object.values(va).some(Boolean);
+    const muted   = Object.entries(a).filter(([, on]) => !on).map(([k]) => k);
+
+    const mode = paused
+      ? ` · BTC-ONLY (signals paused${volLive ? ', vol alerts live' : ''})`
+      : (muted.length ? ` · MUTED: ${muted.join(', ')}` : '');
 
     const detail =
-      `${series.length} series${pins ? ` + ${pins} pinned` : ''}${mutedNote} · ${series.map(s => s.ticker).join(' ')}`;
+      `${series.length} series${pins ? ` + ${pins} pinned` : ''}${mode} · ${series.map(s => s.ticker).join(' ')}`;
 
-    // Every channel off means signals reach only kalshi-alerts.tsv — still a
-    // deliberate setting, but worth a WARN rather than a silent OK.
-    if (muted.length === Object.keys(a).length) {
-      return add('Kalshi watchlist', 'WARN', `all alert channels muted — signals only reach kalshi-alerts.tsv · ${detail}`);
+    // Nothing can notify at all — that is worth a WARN whether it was reached
+    // by pausing signals or by muting every channel.
+    if ((paused && !volLive) || (!paused && muted.length === Object.keys(a).length)) {
+      return add('Kalshi watchlist', 'WARN',
+        `no alert channel can fire — signals only reach kalshi-alerts.tsv · ${detail}`);
     }
     add('Kalshi watchlist', 'OK', detail);
   } catch (e) {

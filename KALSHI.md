@@ -112,10 +112,15 @@ tail:
 | **NORMAL** | 28–52¢ | ~62% |
 | 🔴 **HIGH** | > 52¢ | ~16% |
 
-### Alerting — hourly, not on change
+### Alerting — every 30 minutes, not on change
 
-The regime is reported **once an hour**, whatever it is. Polls run every 5
-minutes, so the report lands on the first poll past each hour mark.
+The regime is reported **every 30 minutes**, whatever it is. Polls run every 5
+minutes, so a report lands on the first poll past each half hour.
+
+Cadence and measurement window are **separate knobs**: the index still averages a
+full hour (4 x 15-min windows), it is just read out twice as often. That halves
+worst-case latency to ~30 min without making the index itself twitchier — a
+shorter measurement window would have done the opposite.
 
 ```
 🟢 BTC 15m vol LOW — 21c  (was NORMAL)
@@ -135,9 +140,9 @@ A band change since the last report is noted inline as `(was NORMAL)`, but it is
 **not** what triggers the alert — a band that holds LOW all morning is still
 worth being told about at 9, 10 and 11.
 
-The trade-off is latency: a LOW regime that starts at 9:05 is not reported until
-10:00. If catching a calm window as it opens matters more than a steady
-heartbeat, this should go back to edge-triggered, or run both.
+Residual latency: a LOW regime starting at 9:05 surfaces at 9:30 rather than
+10:00. Going lower means edge-triggering, which is a different trade — see the
+git history for that version.
 
 **It has its own channels.** `volAlerts` in the watchlist is deliberately separate
 from `alerts`, so the muted signal channels do not silence it:
@@ -146,6 +151,34 @@ from `alerts`, so the muted signal channels do not silence it:
 "alerts":    { "banner": false, "sound": false, "speak": false, "email": false },
 "volAlerts": { "banner": true,  "sound": true,  "speak": true,  "email": true  }
 ```
+
+## BTC-only mode
+
+`"signals_paused": true` in the watchlist skips FLIP/MOVE/VOLUME detection
+entirely — **only the Bitcoin volatility notifier fires**.
+
+```json
+"signals_paused": true,
+"volAlerts": { "banner": true, "sound": true, "speak": true, "email": true }
+```
+
+The 13 series stay in the list and **state keeps updating**, so flipping this
+back to `false` resumes from a current baseline instead of replaying a backlog
+of stale moves as if they were live. Log line each poll:
+
+```
+BTC-only mode — 0 signal(s) suppressed, 159 markets tracked · BTC vol 36.25c NORMAL
+```
+
+This is deliberately a named flag rather than "mute every channel". Both silence
+signals, but only one of them answers the question "why is Kalshi quiet?" three
+weeks from now. The health check reads it directly:
+
+```
+✓ Kalshi watchlist  13 series · BTC-ONLY (signals paused, vol alerts live) · KXFED …
+```
+
+and only WARNs when *nothing* can fire — signals paused **and** vol alerts off.
 
 ### Cost
 
