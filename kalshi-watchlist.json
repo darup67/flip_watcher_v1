@@ -87,7 +87,9 @@
   ],
   "_pinned_comment": "Specific market tickers always watched, regardless of volume.",
   "pinned": [],
-  "_alerts_comment": "Delivery channels. kalshi-alerts.tsv is always written regardless \u2014 muting changes where a signal goes, never whether it is recorded. Set email back to true to resume Kalshi email. Does not affect the TradingView flip notifier, which has its own email path.",
+  "_signals_paused_comment": "BTC-only mode. true = skip FLIP/MOVE/VOLUME entirely; only the Bitcoin volatility notifier fires. Series stay in the list and state keeps updating, so setting this back to false resumes from a current baseline instead of replaying stale moves. Set false to get the other 12 series back.",
+  "signals_paused": true,
+  "_alerts_comment": "Delivery channels for SIGNAL alerts (FLIP/MOVE/VOLUME). Irrelevant while signals_paused is true. kalshi-alerts.tsv is always written regardless.",
   "alerts": {
     "banner": false,
     "sound": false,

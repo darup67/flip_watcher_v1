@@ -375,6 +375,10 @@ function loadWatchlist() {
       // The vol alert is opt-in separately: the user muted signal noise but
       // still wants to hear about a calm book, so it must not inherit that mute.
       volAlerts: { ...CHANNEL_DEFAULTS, ...(w.volAlerts || {}) },
+      // BTC-only mode. Skips FLIP/MOVE/VOLUME detection entirely rather than
+      // computing signals and throwing them away — the series stay in the
+      // watchlist so this is one flag to undo.
+      signalsPaused: !!w.signals_paused,
     };
   } catch { return { state: 'corrupt', series: [], pinned: [], thresholds: {} }; }
 }
@@ -666,9 +670,11 @@ async function updateBtcVolIndex(prev) {
 /** The vol alert has its OWN channels — see volAlerts in the watchlist. */
 let volChannels = { ...CHANNEL_DEFAULTS };
 
-// Report the regime on a fixed cadence rather than on band changes. Polls run
-// every 5 minutes, so the report lands on the first poll past each hour mark.
-const VOL_REPORT_MS = 60 * 60 * 1000;
+// Report cadence. This is deliberately SEPARATE from VOL_WINDOWS: the index
+// still measures a 1-hour window (4 x 15 min), it is just reported twice as
+// often, so a regime change surfaces within ~30 min instead of ~60. Polls run
+// every 5 minutes, so a report lands on the first poll past each half hour.
+const VOL_REPORT_MS = 30 * 60 * 1000;
 
 const VOL_ICON = { LOW: '\u{1F7E2}', NORMAL: '\u26AA', HIGH: '\u{1F534}' };
 
@@ -985,6 +991,14 @@ async function main() {
   }
 
   saveState({ ...base, ...volState, settleUntil: null });
+
+  // BTC-only mode: state is still tracked above, so un-pausing resumes from a
+  // current baseline rather than re-alerting a backlog of stale moves.
+  if (wl.signalsPaused) {
+    log(`BTC-only mode \u2014 ${signals.length} signal(s) suppressed, ${tracked.length} markets tracked` +
+        (volState.volIndex != null ? ` \u00b7 BTC vol ${volState.volIndex}c ${volState.volBand}` : ''));
+    return;
+  }
 
   if (!signals.length) {
     log(`no signals (${tracked.length} markets checked)` +
