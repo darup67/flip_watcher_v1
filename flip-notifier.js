@@ -769,17 +769,40 @@ function fitGroup(arrow, list, budget) {
   return text;
 }
 
+/**
+ * Conviction icon for the title. Previews are off on this Mac, so the body
+ * never renders and the title is the entire visible payload — a MODERATE and a
+ * STRONG looked identical on screen even though only one is worth dropping what
+ * you are doing for. WEAK never appears here: those are filtered out upstream
+ * by MIN_SCORE and never reach a title.
+ *
+ * When a poll carries a mix, the icon reports the BEST flip in it. That is the
+ * one deciding whether the banner is worth interrupting for, and the body
+ * still scores every flip individually.
+ */
+function convictionIcon(flips) {
+  return flips.some(f => f.setup?.label === 'STRONG') ? '🔥'
+       : flips.some(f => f.setup?.label === 'MODERATE') ? '⚡'
+       : '';
+}
+
 function buildTitle(flips) {
-  if (flips.length === 1) return fmtFlip(flips[0]);
+  const icon = convictionIcon(flips);
+  const lead = icon ? `${icon} ` : '';
+  // The icon eats into the fixed title budget, so hand the group fitter the
+  // remainder rather than letting macOS truncate a ticker off the end.
+  const budget = TITLE_MAX - lead.length;
+
+  if (flips.length === 1) return `${lead}${fmtFlip(flips[0])}`;
   const sells = flips.filter(f => f.to === 'SELL').map(f => f.ticker);
   const buys = flips.filter(f => f.to === 'BUY').map(f => f.ticker);
   if (sells.length && buys.length) {
-    const half = Math.floor(TITLE_MAX / 2) - 2;
-    return `${fitGroup('⬇️', sells, half)}  ${fitGroup('⬆️', buys, half)}`;
+    const half = Math.floor(budget / 2) - 2;
+    return `${lead}${fitGroup('⬇️', sells, half)}  ${fitGroup('⬆️', buys, half)}`;
   }
-  return sells.length
-    ? fitGroup('⬇️', sells, TITLE_MAX)
-    : fitGroup('⬆️', buys, TITLE_MAX);
+  return lead + (sells.length
+    ? fitGroup('⬇️', sells, budget)
+    : fitGroup('⬆️', buys, budget));
 }
 
 /**
@@ -1320,7 +1343,8 @@ async function main() {
     })
     .join('\n\n');
 
-  // Spoken form: tickers + best setup's quality.
+  // Spoken form: tickers + best setup's quality. Speech and email are the two
+  // channels that survive a closed lid, so the conviction has to ride both.
   const best = scored.reduce((a, b) => a.setup.score >= b.setup.score ? a : b);
   const spoken = scored
     .map(f => `${f.ticker.replace(/[^A-Za-z0-9]/g, '')} flipped to ${f.to.toLowerCase()}`)
