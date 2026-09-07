@@ -666,34 +666,47 @@ async function updateBtcVolIndex(prev) {
 /** The vol alert has its OWN channels — see volAlerts in the watchlist. */
 let volChannels = { ...CHANNEL_DEFAULTS };
 
-async function reportBtcVol(v) {
-  if (!v || v.band === v.was) return;            // no band change, stay quiet
+// Report the regime on a fixed cadence rather than on band changes. Polls run
+// every 5 minutes, so the report lands on the first poll past each hour mark.
+const VOL_REPORT_MS = 60 * 60 * 1000;
 
-  const arrowed = `${v.index.toFixed(0)}c avg range over ${v.windows.length} windows`;
-  const detail =
-    `${VOL_SERIES} index ${v.index.toFixed(1)}c (${v.windows.map(r => r.toFixed(0) + 'c').join(' ')})\n` +
-    `bands: LOW <${VOL_LOW}c, HIGH >${VOL_HIGH}c`;
+const VOL_ICON = { LOW: '\u{1F7E2}', NORMAL: '\u26AA', HIGH: '\u{1F534}' };
 
-  if (v.band === 'LOW') {
-    const saved = channels;
-    channels = volChannels;                      // this alert bypasses the signal mute
-    try {
-      await notify(`🟢 BTC 15m vol LOW — ${arrowed}`, detail,
-        { sound: 'Hero', speak: `Bitcoin fifteen minute volatility is low. ${v.index.toFixed(0)} cent average range.` });
-    } finally { channels = saved; }
-    log(`VOL LOW: index ${v.index.toFixed(1)}c (was ${v.was || 'unknown'})`);
-  } else {
-    // Leaving LOW matters too — the window you were waiting for has closed.
-    if (v.was === 'LOW') {
-      const saved = channels;
-      channels = volChannels;
-      try {
-        await notify(`⚪ BTC 15m vol back to ${v.band} — ${arrowed}`, detail,
-          { sound: 'Pop', speak: `Bitcoin fifteen minute volatility is ${v.band.toLowerCase()} again.` });
-      } finally { channels = saved; }
-    }
-    log(`VOL ${v.band}: index ${v.index.toFixed(1)}c (was ${v.was || 'unknown'})`);
-  }
+/**
+ * Hourly volatility read. Deliberately NOT edge-triggered: the user wants to
+ * know the regime on a schedule, not only when it changes — a band that holds
+ * LOW all morning is still worth being told about at 9, 10 and 11.
+ *
+ * Returns the timestamp to record, or the previous one when nothing was sent.
+ */
+async function reportBtcVol(v, prev) {
+  if (!v) return prev.lastVolReport || 0;
+
+  const last = prev.lastVolReport || 0;
+  const now  = Date.now();
+  if (now - last < VOL_REPORT_MS) return last;      // not yet due
+
+  const icon    = VOL_ICON[v.band] || '\u26AA';
+  const changed = v.was && v.was !== v.band ? `  (was ${v.was})` : '';
+  const windows = v.windows.map(r => `${r.toFixed(0)}c`).join(' ');
+
+  const title = `${icon} BTC 15m vol ${v.band} \u2014 ${v.index.toFixed(0)}c${changed}`;
+  const body  =
+    `${VOL_SERIES} index ${v.index.toFixed(1)}c over ${v.windows.length} windows: ${windows}\n` +
+    `bands: LOW <${VOL_LOW}c \u00b7 NORMAL ${VOL_LOW}-${VOL_HIGH}c \u00b7 HIGH >${VOL_HIGH}c`;
+
+  const saved = channels;
+  channels = volChannels;                           // bypasses the signal mute
+  try {
+    await notify(title, body, {
+      sound: v.band === 'LOW' ? 'Hero' : 'Pop',
+      speak: `Bitcoin fifteen minute volatility is ${v.band.toLowerCase()}, ` +
+             `${v.index.toFixed(0)} cent average range.`,
+    });
+  } finally { channels = saved; }
+
+  log(`VOL REPORT: ${v.band} index ${v.index.toFixed(1)}c${changed}`);
+  return now;
 }
 
 const SIG_ICON = { FLIP: '🔄', MOVE: '📈', VOLUME: '📊' };
@@ -963,8 +976,9 @@ async function main() {
   try {
     const v = await updateBtcVolIndex(prev);
     if (v) {
-      await reportBtcVol(v);
-      volState = { volBand: v.band, volIndex: Number(v.index.toFixed(2)), volCache: v.cache };
+      const stamp = await reportBtcVol(v, prev);
+      volState = { volBand: v.band, volIndex: Number(v.index.toFixed(2)),
+                   volCache: v.cache, lastVolReport: stamp };
     }
   } catch (e) {
     log(`vol index failed (non-fatal): ${e.message}`);   // never break a poll over it
