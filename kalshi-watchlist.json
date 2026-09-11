@@ -101,7 +101,7 @@
     "banner": true,
     "sound": true,
     "speak": true,
-    "email": true
+    "email": false
   },
   "thresholds": {
     "min_volume_24h": 500,
