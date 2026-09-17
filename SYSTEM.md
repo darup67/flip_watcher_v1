@@ -223,7 +223,14 @@ STRONG, an isolated counter-trend flip in a choppy symbol scores WEAK.
 
 ## Sleep / lid close — the one gap the blind guard cannot cover
 
-Closing the lid sleeps the machine. `StartInterval` jobs do not fire during sleep,
+> Since 2026-09-17 the notifier, kalshi watcher and market-lab jobs use
+> `StartCalendarInterval` (every minute / :00,:05… / :00,:10… / :00,:30) instead of
+> `StartInterval`, after launchd stopped firing all interval jobs on 2026-09-15.
+> Backups of the old plists: `~/Library/LaunchAgents.bak-20260917/`.
+> Also on 2026-09-17: `sudo pmset -a disablesleep 1` was set so lid close no longer
+> sleeps the machine (check with `pmset -g | grep SleepDisabled`; undo with `disablesleep 0`).
+
+Closing the lid sleeps the machine. Scheduled launchd jobs do not fire during sleep,
 so the notifier is not running and therefore **cannot detect its own absence** —
 the 5-failure blind alert never triggers, because nothing is failing, nothing is
 running. Sleep produces exactly the ambiguous silence the design exists to prevent.
