@@ -342,7 +342,10 @@ stop anything. Retiring it would have silently removed that. Replaced with a
 dedicated agent, `com.dhruv.flipnotifier.awake`, installed and verified holding the
 assertion BEFORE the old pair was unloaded. Unload it if you want normal sleep.
 
-Old files are left in place, untouched, in `~/pine-alerts/`.
+Old files are left in place, untouched, in `~/pine-alerts/`. On 2026-09-17 the two
+unloaded plists were moved out of `~/Library/LaunchAgents` to
+`~/pine-alerts/retired-launchagents/` — left there, they would have loaded again
+at the next login (KeepAlive + RunAtLoad) and doubled every alert.
 
 ## Phantom Flow Core alerts
 

@@ -75,6 +75,14 @@ const ZOMBIE_CHECK = `
 
 /* -------------------------------------------------- 1. scheduler */
 
+// On 2026-09-15 launchd stopped firing every StartInterval job for 56h while
+// calendar jobs kept running, and "loaded, last run clean" stayed true the whole
+// time. The agents were moved to StartCalendarInterval; flag any regression.
+async function usesStartInterval(plist) {
+  const { out } = await run('/usr/bin/plutil', ['-extract', 'StartInterval', 'raw', plist]);
+  return /^\d+$/.test((out || '').trim());
+}
+
 async function checkScheduler() {
   if (!existsSync(PLIST)) return add('Scheduler', 'FAIL', 'LaunchAgent plist missing');
   let { out } = await run('/bin/launchctl', ['list']);
@@ -95,6 +103,9 @@ async function checkScheduler() {
   const lastExit = line.trim().split(/\s+/)[1];
   if (lastExit !== '0') {
     return add('Scheduler', 'WARN', `loaded, but last run exited ${lastExit}`);
+  }
+  if (await usesStartInterval(PLIST)) {
+    return add('Scheduler', 'WARN', 'plist uses StartInterval (stalled 2026-09-15) — switch to StartCalendarInterval');
   }
   add('Scheduler', 'OK', 'LaunchAgent loaded, last run clean');
 }
@@ -310,7 +321,8 @@ function checkState() {
   }
   if (age > STALE_AFTER_S) {
     return add('State', 'FAIL',
-      `last good read ${Math.round(age / 60)} min ago — polling has stopped`);
+      `last good read ${Math.round(age / 60)} min ago — polling has stopped` +
+      ' (if the agent is loaded, launchd is not firing it: reload does not fix that — reboot)');
   }
   add('State', 'OK', `fresh (${Math.round(age)}s old, ${Object.keys(s.regimes || {}).length} symbols)`);
 }
@@ -396,10 +408,19 @@ async function checkSleepGuard() {
   const held = caffeinateHeld || amphetamineHeld;
   const source = [caffeinateHeld && 'caffeinate', amphetamineHeld && 'Amphetamine'].filter(Boolean).join(' + ');
 
+  // Assertions only stop idle sleep; closing the lid sleeps the Mac regardless
+  // (outside clamshell mode). Lid-closed polling needs `pmset disablesleep 1`,
+  // set 2026-09-17 — which a macOS update can quietly reset.
+  const { out: pm } = await run('/usr/bin/pmset', ['-g']);
+  const lidAwake = /SleepDisabled\s+1/.test(pm);
+  if (loaded && held && !lidAwake && !repaired) {
+    return add('Sleep guard', 'WARN',
+      `idle sleep blocked by ${source}, but lid close still sleeps — sudo pmset -a disablesleep 1`);
+  }
   if (loaded && held) {
     return add('Sleep guard', repaired ? 'WARN' : 'OK',
       repaired ? 'was unloaded — reloaded by --repair, assertion restored'
-               : `sleep prevention held by ${source} — lid close keeps polling`);
+               : `sleep prevention held by ${source} + SleepDisabled — lid close keeps polling`);
   }
   if (loaded && !held) {
     return add('Sleep guard', 'FAIL',
@@ -529,6 +550,9 @@ async function checkKalshiAgent() {
   if (lastExit !== '0') {
     return add('Kalshi agent', 'WARN', `loaded, but last run exited ${lastExit}`);
   }
+  if (await usesStartInterval(K_PLIST)) {
+    return add('Kalshi agent', 'WARN', 'plist uses StartInterval (stalled 2026-09-15) — switch to StartCalendarInterval');
+  }
   add('Kalshi agent', 'OK', 'LaunchAgent loaded, last run clean');
 }
 
@@ -631,7 +655,8 @@ function checkKalshiState() {
   const age = (Date.now() - new Date(s.updated).getTime()) / 1000;
   if (age > K_STALE_AFTER_S) {
     return add('Kalshi state', 'FAIL',
-      `last good read ${Math.round(age / 60)} min ago — polling has stopped`);
+      `last good read ${Math.round(age / 60)} min ago — polling has stopped` +
+      ' (if the agent is loaded, launchd is not firing it: reload does not fix that — reboot)');
   }
   add('Kalshi state', 'OK', `fresh (${Math.round(age)}s old, ${n} markets tracked)`);
 }

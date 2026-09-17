@@ -23,11 +23,15 @@ const [,, subject, body] = process.argv;
 if (!subject) { process.stderr.write('Usage: send-email.js "subject" "body"\n'); process.exit(1); }
 
 // Hard process timeout — never hang forever regardless of what happens below.
-const HARD_TIMEOUT_MS = 30000;
+// Callers running every minute kill this process at 35s, so the default stays
+// under that; a caller with more time (the daily report) raises it via env.
+const HARD_TIMEOUT_MS = Number(process.env.SEND_EMAIL_TIMEOUT_MS) || 30000;
+const STARTED = Date.now();
 setTimeout(() => { process.stderr.write('hard timeout\n'); process.exit(1); }, HARD_TIMEOUT_MS).unref();
 
 const MAX_RETRIES = 3;
 const BACKOFF_BASE_MS = 2000;
+const SOCKET_TIMEOUT_MS = 8000;
 
 // SMTP dot-stuffing: a line starting with '.' must be doubled so the server
 // doesn't interpret it as end-of-data.
@@ -83,7 +87,7 @@ function attempt(retryNum) {
       return reject(e);
     }
     sock.setEncoding('utf8');
-    sock.setTimeout(12000, () => finish(new Error('socket timeout')));
+    sock.setTimeout(SOCKET_TIMEOUT_MS, () => finish(new Error('socket timeout')));
 
     sock.on('data', chunk => {
       buf += chunk;
@@ -125,6 +129,10 @@ async function sendWithRetry() {
       }
       if (i < MAX_RETRIES - 1) {
         const delay = BACKOFF_BASE_MS * Math.pow(2, i);
+        // Previously 3 x 12s sockets + backoff overran the 30s hard timeout, so
+        // the last retry was killed mid-flight as a bare "hard timeout". Stop
+        // with the real error when another attempt cannot finish in budget.
+        if (Date.now() - STARTED + delay + SOCKET_TIMEOUT_MS > HARD_TIMEOUT_MS) break;
         process.stderr.write(`attempt ${i + 1} failed (${e.message}), retrying in ${delay}ms\n`);
         await new Promise(r => setTimeout(r, delay));
       }
