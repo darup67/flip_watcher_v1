@@ -1410,15 +1410,20 @@ const ONE_SHOT = READ_ONLY || args.has('--test') || args.has('--reset')
  */
 async function cycleRunner() {
   const started = Date.now();
-  await main();
-  if (ONE_SHOT) return;
-  while (inBurstWindow() && Date.now() - started < BURST_BUDGET_MS) {
-    await sleep(BURST_MS);
-    if (shuttingDown) break;
+  try {
     await main();
+    if (ONE_SHOT) return;
+    while (inBurstWindow() && Date.now() - started < BURST_BUDGET_MS) {
+      await sleep(BURST_MS);
+      if (shuttingDown) break;
+      await main();
+    }
+  } finally {
+    // Close the cached WebSocket — no point keeping it open between launchd ticks.
+    // One-shot runs (--status, --core, ...) must close it too, or the open socket
+    // keeps the event loop alive and the command never exits.
+    if (_cachedWs) { try { _cachedWs.close(); } catch {} _cachedWs = null; }
   }
-  // Close the cached WebSocket — no point keeping it open between launchd ticks.
-  if (_cachedWs) { try { _cachedWs.close(); } catch {} _cachedWs = null; }
 }
 
 cycleRunner()
