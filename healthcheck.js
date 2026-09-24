@@ -613,9 +613,15 @@ function checkKalshiWatchlist() {
     const detail =
       `${series.length} series${pins ? ` + ${pins} pinned` : ''}${mode} · ${series.map(s => s.ticker).join(' ')}`;
 
-    // Nothing can notify at all — that is worth a WARN whether it was reached
-    // by pausing signals or by muting every channel.
-    if ((paused && !volLive) || (!paused && muted.length === Object.keys(a).length)) {
+    // Nothing can notify at all. Muting every channel is worth a WARN — it looks
+    // exactly like a broken alert path. signals_paused is an explicit mode switch
+    // (BTC-only), so report it as INFO: a permanent WARN would pin the daily verdict
+    // at DEGRADED and teach everyone to ignore it.
+    if (paused && !volLive) {
+      return add('Kalshi watchlist', 'INFO',
+        `signals paused by config — nothing alerts, output only reaches kalshi-alerts.tsv · ${detail}`);
+    }
+    if (!paused && muted.length === Object.keys(a).length) {
       return add('Kalshi watchlist', 'WARN',
         `no alert channel can fire — signals only reach kalshi-alerts.tsv · ${detail}`);
     }
