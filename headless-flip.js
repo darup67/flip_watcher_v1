@@ -641,7 +641,7 @@ function compare(hours, headFile = ALERTS) {
   if (onlyChart.length) console.log('only chart:\n  ' + onlyChart.map(fmt).join('\n  '));
 }
 
-module.exports = { CFG, TF_MS, DIR, SOURCES, pool, supertrendRegimes, scoreCore, atrSeries, fvgAt, sendFvgEmail, agg, SIG };
+module.exports = { CFG, TF_MS, DIR, SOURCES, pool, supertrendRegimes, scoreCore, atrSeries, fvgAt, sendFvgEmail, sendEmail, agg, SIG };
 
 if (require.main === module) {
 const arg = process.argv[2];
