@@ -47,7 +47,8 @@ function buildMessage() {
     `Subject: ${subject}`,
     `Date: ${new Date().toUTCString()}`,
     'MIME-Version: 1.0',
-    'Content-Type: text/plain; charset=UTF-8',
+    // SEND_EMAIL_HTML=1 sends the body as HTML (headless matrix report); default stays plain text.
+    `Content-Type: ${process.env.SEND_EMAIL_HTML === '1' ? 'text/html' : 'text/plain'}; charset=UTF-8`,
     '',
     stuffedBody,
   ].join('\r\n');
