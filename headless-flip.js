@@ -239,15 +239,24 @@ async function sendEmail(flips) {
 
 async function status() {
   const results = await evaluateAll();
-  const chart = chartRegimes();
+  const paused = fs.existsSync(path.join(DIR, 'CHART_WATCHER_PAUSED'));
+  const chart = paused ? {} : chartRegimes();
+  const state = readJSON(STATE_FILE, { regimes: {} });
+  const et = (t) => new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   let agree = 0;
   for (const r of results) {
     if (r.error) { console.log(`${r.name.padEnd(10)} ERROR ${r.error}`); continue; }
+    const closed = et(r.barTime + TF_MS);
+    const pending = state.regimes[r.tv] && state.regimes[r.tv] !== r.regime ? '  (flip pending: next run emails it)' : '';
+    if (paused) { console.log(`${r.name.padEnd(10)} ${r.regime.padEnd(4)}  bar closed ${closed} ET${pending}`); continue; }
     const c = chart[r.tv] || '-';
     if (c === r.regime) agree++;
-    console.log(`${r.name.padEnd(10)} headless ${r.regime.padEnd(4)}  chart ${c.padEnd(4)} ${c === r.regime ? ' ' : '≠'}  last bar ${new Date(r.barTime).toISOString().slice(5, 16)}Z`);
+    console.log(`${r.name.padEnd(10)} headless ${r.regime.padEnd(4)}  chart ${c.padEnd(4)} ${c === r.regime ? ' ' : '≠'}  bar closed ${closed} ET`);
   }
-  console.log(`\nagree ${agree}/${results.filter((r) => !r.error).length}`);
+  const ok = results.filter((r) => !r.error);
+  const buys = ok.filter((r) => r.regime === 'BUY').length;
+  console.log(`\n${ok.length}/${results.length} symbols ok · ${buys} BUY / ${ok.length - buys} SELL · mode ${CFG.mode}, emails ${CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE + STRONG'}` +
+    (paused ? ' · chart watcher paused (no comparison)' : ` · agree with chart ${agree}/${ok.length}`));
 }
 
 async function replay(hours) {
