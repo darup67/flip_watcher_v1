@@ -1,32 +1,133 @@
 {
  "mode": "live",
+ "minScore": 2,
  "factor": 3.0,
  "atrLen": 10,
  "symbols": [
-  {"tv": "BATS:SPCX", "source": "yahoo", "ticker": "SPCX"},
-  {"tv": "BATS:PLTR", "source": "yahoo", "ticker": "PLTR"},
-  {"tv": "BATS:SOXL", "source": "yahoo", "ticker": "SOXL"},
-  {"tv": "BATS:TQQQ", "source": "yahoo", "ticker": "TQQQ"},
-  {"tv": "BATS:SQQQ", "source": "yahoo", "ticker": "SQQQ"},
-  {"tv": "BATS:MU", "source": "yahoo", "ticker": "MU"},
-  {"tv": "BATS:MSTR", "source": "yahoo", "ticker": "MSTR"},
-  {"tv": "BATS:NBIS", "source": "yahoo", "ticker": "NBIS"},
-  {"tv": "COINBASE:SOLUSD", "source": "coinbase", "ticker": "SOL-USD"},
-  {"tv": "CME_MINI_DL:MNQ1!", "source": "yahoo", "ticker": "MNQ=F"},
-  {"tv": "COMEX_MINI_DL:MGCV2026", "source": "yahoo", "ticker": "MGC=F"},
-  {"tv": "CME_MINI_DL:MES1!", "source": "yahoo", "ticker": "MES=F"},
-  {"tv": "NYMEX_DL:MCL1!", "source": "yahoo", "ticker": "MCL=F"},
-  {"tv": "CBOT_MINI_DL:MYM1!", "source": "yahoo", "ticker": "MYM=F"},
-  {"tv": "COINBASE:XRPUSD", "source": "coinbase", "ticker": "XRP-USD"},
-  {"tv": "BITSTAMP:BTCUSD", "source": "bitstamp", "ticker": "btcusd"},
-  {"tv": "COINBASE:ETHUSD", "source": "coinbase", "ticker": "ETH-USD"},
-  {"tv": "BINANCE:BNBUSDT", "source": "binance", "ticker": "BNBUSDT"},
-  {"tv": "COINBASE:HYPEUSD", "source": "coinbase", "ticker": "HYPE-USD"},
-  {"tv": "KRAKEN:ADAUSD", "source": "kraken", "ticker": "ADAUSD"},
-  {"tv": "COINBASE:ZECUSD", "source": "coinbase", "ticker": "ZEC-USD"},
-  {"tv": "COINBASE:NEARUSD", "source": "coinbase", "ticker": "NEAR-USD"},
-  {"tv": "COINBASE:LINKUSD", "source": "coinbase", "ticker": "LINK-USD"},
-  {"tv": "BATS:HOOD", "source": "yahoo", "ticker": "HOOD"},
-  {"tv": "BATS:ORCL", "source": "yahoo", "ticker": "ORCL"}
+  {
+   "tv": "BATS:SPCX",
+   "source": "yahoo",
+   "ticker": "SPCX"
+  },
+  {
+   "tv": "BATS:PLTR",
+   "source": "yahoo",
+   "ticker": "PLTR"
+  },
+  {
+   "tv": "BATS:SOXL",
+   "source": "yahoo",
+   "ticker": "SOXL"
+  },
+  {
+   "tv": "BATS:TQQQ",
+   "source": "yahoo",
+   "ticker": "TQQQ"
+  },
+  {
+   "tv": "BATS:SQQQ",
+   "source": "yahoo",
+   "ticker": "SQQQ"
+  },
+  {
+   "tv": "BATS:MU",
+   "source": "yahoo",
+   "ticker": "MU"
+  },
+  {
+   "tv": "BATS:MSTR",
+   "source": "yahoo",
+   "ticker": "MSTR"
+  },
+  {
+   "tv": "BATS:NBIS",
+   "source": "yahoo",
+   "ticker": "NBIS"
+  },
+  {
+   "tv": "COINBASE:SOLUSD",
+   "source": "coinbase",
+   "ticker": "SOL-USD"
+  },
+  {
+   "tv": "CME_MINI_DL:MNQ1!",
+   "source": "yahoo",
+   "ticker": "MNQ=F"
+  },
+  {
+   "tv": "COMEX_MINI_DL:MGCV2026",
+   "source": "yahoo",
+   "ticker": "MGC=F"
+  },
+  {
+   "tv": "CME_MINI_DL:MES1!",
+   "source": "yahoo",
+   "ticker": "MES=F"
+  },
+  {
+   "tv": "NYMEX_DL:MCL1!",
+   "source": "yahoo",
+   "ticker": "MCL=F"
+  },
+  {
+   "tv": "CBOT_MINI_DL:MYM1!",
+   "source": "yahoo",
+   "ticker": "MYM=F"
+  },
+  {
+   "tv": "COINBASE:XRPUSD",
+   "source": "coinbase",
+   "ticker": "XRP-USD"
+  },
+  {
+   "tv": "BITSTAMP:BTCUSD",
+   "source": "bitstamp",
+   "ticker": "btcusd"
+  },
+  {
+   "tv": "COINBASE:ETHUSD",
+   "source": "coinbase",
+   "ticker": "ETH-USD"
+  },
+  {
+   "tv": "BINANCE:BNBUSDT",
+   "source": "binance",
+   "ticker": "BNBUSDT"
+  },
+  {
+   "tv": "COINBASE:HYPEUSD",
+   "source": "coinbase",
+   "ticker": "HYPE-USD"
+  },
+  {
+   "tv": "KRAKEN:ADAUSD",
+   "source": "kraken",
+   "ticker": "ADAUSD"
+  },
+  {
+   "tv": "COINBASE:ZECUSD",
+   "source": "coinbase",
+   "ticker": "ZEC-USD"
+  },
+  {
+   "tv": "COINBASE:NEARUSD",
+   "source": "coinbase",
+   "ticker": "NEAR-USD"
+  },
+  {
+   "tv": "COINBASE:LINKUSD",
+   "source": "coinbase",
+   "ticker": "LINK-USD"
+  },
+  {
+   "tv": "BATS:HOOD",
+   "source": "yahoo",
+   "ticker": "HOOD"
+  },
+  {
+   "tv": "BATS:ORCL",
+   "source": "yahoo",
+   "ticker": "ORCL"
+  }
  ]
 }
