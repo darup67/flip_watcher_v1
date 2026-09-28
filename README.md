@@ -86,7 +86,7 @@ Alert channels:
 | Sound (`afplay`) | ✓ working, needs no permission |
 | Speech (`say`) | ✓ working, needs no permission |
 
-Silence the speech with `FLIP_SPEAK=0`.
+Speech is off by default since 2026-09-28 (banners only); `FLIP_SPEAK=1` turns it back on.
 
 ## Behaviour notes
 

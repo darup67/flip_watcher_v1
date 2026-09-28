@@ -101,7 +101,7 @@ launchctl list | grep flipnotifier
 tail -30 flip-notifier.log
 
 FLIP_CDP=127.0.0.1:9999 node healthcheck.js   # simulate TradingView being down
-FLIP_SPEAK=0 node flip-notifier.js            # mute speech
+FLIP_SPEAK=1 node flip-notifier.js            # speech on (off by default since 2026-09-28)
 ```
 
 ## Phantom Flow Core probe

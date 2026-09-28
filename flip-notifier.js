@@ -246,7 +246,7 @@ async function notify(title, body, { sound = 'Submarine', speak = null } = {}) {
 
   // 3. Speech — says what flipped, so it carries information without the screen.
   // Fire and forget: a slow TTS call must not delay the next poll.
-  if (speak && process.env.FLIP_SPEAK !== '0') {
+  if (speak && process.env.FLIP_SPEAK === '1') {   // voice off by default (user, 2026-09-28): banners only
     run('/usr/bin/say', ['-r', '210', '-v', 'Samantha', speak]).catch(() => {});
   }
 
