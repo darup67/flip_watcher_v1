@@ -16,19 +16,19 @@
 //   node headless-stats.js          print the scoreboard and write headless-stats.json
 const fs = require('fs');
 const path = require('path');
-const { CFG, TF_MS, DIR, SOURCES, pool, supertrendRegimes, scoreCore, atrSeries, fvgAt } = require('./headless-flip.js');
+const { CFG, TF_MS, DIR, SOURCES, pool, supertrendRegimes, scoreCore, atrSeries, fvgAt, agg, SIG } = require('./headless-flip.js');
 
 const OUT = path.join(DIR, process.env.HEADLESS_TF ? `headless-stats-${process.env.HEADLESS_TF}m.json` : 'headless-stats.json');   // research runs don't touch the live file
 const H = { '1h': 3600e3, '4h': 4 * 3600e3, '24h': 24 * 3600e3 };
 const CONFLUENCE_MS = 2 * 3600e3;
 const DAY_BARS = Math.round(24 * 3600e3 / TF_MS);   // 24h of bars at the configured timeframe
 
-function exitPrice(bars, i, ms) {
+function exitPrice(bars, i, ms, barMs = TF_MS) {
   // close of the last bar that closed by entry + ms; null if history doesn't reach that far yet
-  const target = bars[i].t + TF_MS + ms;
-  if (bars[bars.length - 1].t + TF_MS < target) return null;
+  const target = bars[i].t + barMs + ms;
+  if (bars[bars.length - 1].t + barMs < target) return null;
   let j = i;
-  while (j + 1 < bars.length && bars[j + 1].t + TF_MS <= target) j++;
+  while (j + 1 < bars.length && bars[j + 1].t + barMs <= target) j++;
   return bars[j].c;
 }
 
@@ -41,8 +41,9 @@ async function computeStats() {
     try {
       const bars = (await SOURCES[sym.source](sym.ticker)).filter((b) => b.t + TF_MS <= Date.now());
       if (bars.length < CFG.atrLen + 5) return null;
+      const mk = (tf) => { const b = agg(bars, tf); return { tf, ms: tf * 60000, bars: b, regs: supertrendRegimes(b, CFG.factor, CFG.atrLen), atr: atrSeries(b) }; };
       return { sym, name: sym.tv.split(':')[1], fut: sym.group === 'futures', bars,
-               regs: supertrendRegimes(bars, CFG.factor, CFG.atrLen), atr: atrSeries(bars) };
+               regs: supertrendRegimes(bars, CFG.factor, CFG.atrLen), atr: atrSeries(bars), fRally: mk(SIG.rally), fGap: mk(SIG.gap) };
     } catch { return null; }
   })).filter(Boolean);
 
@@ -56,12 +57,17 @@ async function computeStats() {
         const t = s.bars[i].t;
         (flipsByT.get(t) || flipsByT.set(t, []).get(t)).push({ s, i, side: s.regs[i] });
       }
-      const g = s.regs[i] ? fvgAt(s.bars, i, s.atr, minAtr) : null;
-      if (g && (g.side === 'BULL' || s.fut)) {
-        const prior = s.bars.slice(Math.max(0, i - 20), i).map((b) => b.v || 0), avg = prior.reduce((a, x) => a + x, 0) / (prior.length || 1);
-        const volx = avg > 0 ? (s.bars[i].v || 0) / avg : 0;
-        gaps.push({ s, i, g, star: (g.side === 'BULL') === (s.regs[i] === 'BUY'), rally: !s.fut && g.side === 'BULL' && volx >= ((CFG.fvg && CFG.fvg.rallyVolX) || 2.5) });
-      }
+    }
+    // gaps on the gap frame (1h): bull for all, bear for futures; rallies on the rally frame (30m)
+    const volxAt = (F, i) => { const pr = F.bars.slice(Math.max(0, i - 20), i).map((b) => b.v || 0), a = pr.reduce((x, y) => x + y, 0) / (pr.length || 1); return a > 0 ? (F.bars[i].v || 0) / a : 0; };
+    for (let i = 2; i < s.fGap.bars.length; i++) {
+      const g = s.fGap.regs[i] ? fvgAt(s.fGap.bars, i, s.fGap.atr, minAtr) : null;
+      if (g && (g.side === 'BULL' || s.fut)) gaps.push({ s, F: s.fGap, i, g, star: (g.side === 'BULL') === (s.fGap.regs[i] === 'BUY'), rally: false });
+    }
+    if (!s.fut) for (let i = 2; i < s.fRally.bars.length; i++) {
+      const g = s.fRally.regs[i] ? fvgAt(s.fRally.bars, i, s.fRally.atr, minAtr) : null;
+      if (g && g.side === 'BULL' && volxAt(s.fRally, i) >= ((CFG.fvg && CFG.fvg.rallyVolX) || 2.5))
+        gaps.push({ s, F: s.fRally, i, g, star: s.fRally.regs[i] === 'BUY', rally: true });
     }
   }
   const regimeAt = (s, t) => {   // regime as of the latest bar at or before t
@@ -78,31 +84,32 @@ async function computeStats() {
       const same = list.filter((x) => x.side === f.side).length;
       const recent = f.s.flipIdx.filter((j) => j < f.i && f.s.bars[j].t >= t - 24 * 3600e3).length;
       const { label } = scoreCore(f.side, same, regimes, recent);
-      const star = gaps.some((x) => x.s === f.s && x.i <= f.i && f.s.bars[f.i].t - f.s.bars[x.i].t <= CONFLUENCE_MS
-                                    && (x.g.side === 'BULL') === (f.side === 'BUY'));
+      const tf = f.s.bars[f.i].t + TF_MS;
+      const star = gaps.some((x) => { const tg = x.F.bars[x.i].t + x.F.ms; return x.s === f.s && tg <= tf && tf - tg <= CONFLUENCE_MS
+                                      && (x.g.side === 'BULL') === (f.side === 'BUY'); });
       const dir = f.side === 'BUY' ? 1 : -1, entry = f.s.bars[f.i].c, ret = {};
       for (const [k, ms] of Object.entries(H)) { const x = exitPrice(f.s.bars, f.i, ms); ret[k] = x == null ? null : dir * (x / entry - 1); }
       flipRows.push({ label, star, ret, fut: f.s.fut, t });
     }
   }
 
-  const rally21 = (s, i) => {   // +2 ATR before -1 ATR within 24h (the tested early-rally setup)
-    const up = s.bars[i].c + 2 * s.atr[i], dn = s.bars[i].c - s.atr[i];
-    for (let j = i + 1; j <= i + DAY_BARS && j < s.bars.length; j++) { if (s.bars[j].l <= dn) return 0; if (s.bars[j].h >= up) return 1; }
-    return i + DAY_BARS < s.bars.length ? 0 : null;
+  const rally21 = (F, i) => {   // +2 ATR before -1 ATR within 24h (the tested early-rally setup), on F's own bars
+    const day = Math.round(24 * 3600e3 / F.ms), up = F.bars[i].c + 2 * F.atr[i], dn = F.bars[i].c - F.atr[i];
+    for (let j = i + 1; j <= i + day && j < F.bars.length; j++) { if (F.bars[j].l <= dn) return 0; if (F.bars[j].h >= up) return 1; }
+    return i + day < F.bars.length ? 0 : null;
   };
-  const gapRows = gaps.map(({ s, i, g, star, rally }) => {
-    const dir = g.side === 'BULL' ? 1 : -1, entry = s.bars[i].c, end = s.bars[i].t + TF_MS + H['24h'];
-    const complete = s.bars[s.bars.length - 1].t + TF_MS >= end;
+  const gapRows = gaps.map(({ s, F, i, g, star, rally }) => {
+    const dir = g.side === 'BULL' ? 1 : -1, entry = F.bars[i].c, end = F.bars[i].t + F.ms + H['24h'];
+    const complete = F.bars[F.bars.length - 1].t + F.ms >= end;
     let tested = false, broken = false;
-    for (let j = i + 1; j < s.bars.length && s.bars[j].t + TF_MS <= end; j++) {
-      const b = s.bars[j];
+    for (let j = i + 1; j < F.bars.length && F.bars[j].t + F.ms <= end; j++) {
+      const b = F.bars[j];
       if (dir > 0 ? b.l <= g.top : b.h >= g.bottom) tested = true;
       if (dir > 0 ? b.c < g.bottom : b.c > g.top) broken = true;
     }
     const ret = {};
-    for (const k of ['4h', '24h']) { const x = exitPrice(s.bars, i, H[k]); ret[k] = x == null ? null : dir * (x / entry - 1); }
-    return { star, rally, fut: s.fut, complete, tested, broken, ret, r21: g.side === 'BULL' ? rally21(s, i) : null, t: s.bars[i].t };
+    for (const k of ['4h', '24h']) { const x = exitPrice(F.bars, i, H[k], F.ms); ret[k] = x == null ? null : dir * (x / entry - 1); }
+    return { star, rally, fut: s.fut, complete, tested, broken, ret, r21: g.side === 'BULL' ? rally21(F, i) : null, t: F.bars[i].t };
   });
 
   const summarize = (rows, keys) => {
@@ -124,8 +131,8 @@ async function computeStats() {
              held: pct(c.filter((x) => x.tested).map((x) => !x.broken)),
              rally21: pct(rows.map((x) => x.r21).filter((x) => x != null).map(Boolean)) };
   };
-  const gapStats = { '🚀 early rally': gstats(gapRows.filter((x) => x.rally)), '⭐ with trend': gstats(gapRows.filter((x) => x.star)), 'against trend': gstats(gapRows.filter((x) => !x.star)),
-                     'all tradable': gstats(gapRows) };
+  const gapStats = { '🚀 early rally': gstats(gapRows.filter((x) => x.rally)), '⭐ with trend': gstats(gapRows.filter((x) => !x.rally && x.star)), 'against trend': gstats(gapRows.filter((x) => !x.rally && !x.star)),
+                     'all gaps': gstats(gapRows.filter((x) => !x.rally)) };
   // Trust check: does each group hold in both halves of history, and does it beat random entry?
   const all = flipRows.concat(gapRows).map((x) => x.t).sort((a, b) => a - b), mid = all[all.length >> 1];
   const half = (rows, get) => [rows.filter((x) => x.t < mid), rows.filter((x) => x.t >= mid)].map((h) => {
@@ -133,8 +140,8 @@ async function computeStats() {
   });
   const r24 = (x) => (x.ret['24h'] == null ? null : x.ret['24h'] > 0), r21 = (x) => x.r21;
   const baseRows = [];   // random entry: every 8th bar, long, non-futures
-  for (const s of series) if (!s.fut) for (let i = 30; i < s.bars.length; i += 8) {
-    const x = exitPrice(s.bars, i, H['24h']); baseRows.push({ t: s.bars[i].t, ret: { '24h': x == null ? null : x / s.bars[i].c - 1 }, r21: rally21(s, i) });
+  for (const s of series) if (!s.fut) for (let i = 30; i < s.fRally.bars.length; i += 4) {
+    const F = s.fRally, x = exitPrice(F.bars, i, H['24h'], F.ms); baseRows.push({ t: F.bars[i].t, ret: { '24h': x == null ? null : x / F.bars[i].c - 1 }, r21: rally21(F, i) });
   }
   const split = {
     'flips STRONG (right 24h)': half(flipRows.filter((x) => x.label === 'STRONG'), r24),
@@ -146,7 +153,7 @@ async function computeStats() {
   };
   const first = Math.min(...series.map((s) => s.bars[0].t));
   const stats = { updated: new Date().toISOString(), from: new Date(first).toISOString(), symbols: series.length,
-                  minAtr, flips, gaps: gapStats, split, tf: TF_MS / 60000 };
+                  minAtr, flips, gaps: gapStats, split, tf: TF_MS / 60000, mix: { flips: TF_MS / 60000, rally: SIG.rally, gaps: SIG.gap } };
   fs.writeFileSync(OUT, JSON.stringify(stats, null, 1));
   return stats;
 }
@@ -154,12 +161,12 @@ async function computeStats() {
 function fmt(stats) {
   const p = (x) => (x == null ? '  –' : `${Math.round(100 * x)}%`.padStart(4));
   const r = (x) => (x == null ? '    –' : `${x >= 0 ? '+' : ''}${(100 * x).toFixed(1)}%`.padStart(6));
-  const L = [`Signal scoreboard · ${stats.symbols} symbols · history since ${stats.from.slice(0, 10)}`, '',
+  const L = [`Signal scoreboard · ${stats.symbols} symbols · history since ${stats.from.slice(0, 10)} · flips ${stats.mix.flips}m, 🚀 ${stats.mix.rally}m, gaps ${stats.mix.gaps}m`, '',
     'FLIPS (BUY = long, SELL = short; "right" = moved the right way)',
     '                  n   right 1h  right 4h  right 24h   median 4h  median 24h'];
   for (const [k, v] of Object.entries(stats.flips))
     L.push(`${k.padEnd(14)} ${String(v.n).padStart(5)}   ${p(v['1h'].right)}      ${p(v['4h'].right)}      ${p(v['24h'].right)}      ${r(v['4h'].median)}     ${r(v['24h'].median)}`);
-  L.push('', `GAPS (bull all, bear futures only; ≥ ${stats.minAtr}× ATR; within 24h)`,
+  L.push('', `GAPS (🚀 on ${stats.mix.rally}m bars; others on ${stats.mix.gaps}m: bull all, bear futures only; ≥ ${stats.minAtr}× ATR; within 24h)`,
     '                  n   tested  broken  held*   right 4h  right 24h  median 24h  2:1 rally');
   for (const [k, v] of Object.entries(stats.gaps))
     L.push(`${k.padEnd(14)} ${String(v.n).padStart(5)}    ${p(v.tested)}    ${p(v.broken)}   ${p(v.held)}      ${p(v['4h'].right)}      ${p(v['24h'].right)}     ${r(v['24h'].median)}     ${p(v.rally21)}`);
