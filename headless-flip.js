@@ -497,7 +497,7 @@ async function matrix(send) {
     briefHtml += `<h3 style="margin:18px 0 4px">Evidence: which signals earn a real-time email (last ${ev.windowDays} days, after costs)</h3>
 <table cellspacing="0" style="font-size:13px;border-collapse:collapse"><tr><th style="text-align:left;padding:2px 8px">signal</th><th style="padding:2px 8px">n</th><th style="padding:2px 8px">net win</th><th style="padding:2px 8px">random</th><th style="padding:2px 8px">mean net</th><th></th></tr>
 ${evRows}
-</table><div style="color:#666;font-size:12px">Proven = ≥ ${ev.minN} graded signals and the win rate's lower bound above random entry for the same assets (Kalshi: above price + fee). Everything else waits for these briefs.</div>`;
+</table><div style="color:#666;font-size:12px">Proven = ≥ ${ev.minN} graded signals over ≥ ${ev.minDays || 10} separate days, and the win rate's lower bound above random entry for the same assets (Kalshi: above price + fee). Everything else waits for these briefs.</div>`;
     const held = ledger.open().prepare(`SELECT kind, sym, side, t, price FROM signals WHERE product='headless' AND source='live' AND emailed=0 AND t > ?
       AND (kind IN ('flip:STRONG','rally','gap:futures')) ORDER BY t`).all(since);
     const hl = held.map((h) => `<li>${esc(et(h.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · <b>${esc(h.sym.split(':')[1])}</b> ${esc(h.kind)} ${h.side === 'long' ? '⬆️' : '⬇️'} at ${px(h.price)}</li>`).join('\n');
