@@ -16,3 +16,6 @@ node_modules/
 # Never commit key material
 *.p8
 *.pem
+headless-state.json
+headless-alerts.tsv
+headless-replay.tsv

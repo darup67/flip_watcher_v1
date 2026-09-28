@@ -1,5 +1,5 @@
 {
-  "backedUpAt": "2026-09-07T21:36:53.915Z",
+  "backedUpAt": "2026-09-28T16:25:23.175Z",
   "scripts": [
     {
       "name": "Phantom Flow Alert Bridge",
@@ -39,7 +39,7 @@
     {
       "name": "Watchlist Flip Scanner",
       "id": "USER;22b71d6d83cc4fb18ec540d59b7e5f61",
-      "version": "8.0",
+      "version": "10.0",
       "bytes": 5878,
       "file": "Watchlist_Flip_Scanner.pine"
     }

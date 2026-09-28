@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.dhruv.headlessflip</string>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/dhruvpatel/.local/bin/node</string>
+		<string>/Users/dhruvpatel/flip-notifier/headless-flip.js</string>
+	</array>
+	<key>StandardErrorPath</key>
+	<string>/Users/dhruvpatel/flip-notifier/headless-launchd.err.log</string>
+	<key>StandardOutPath</key>
+	<string>/Users/dhruvpatel/flip-notifier/headless-launchd.out.log</string>
+	<key>StartCalendarInterval</key>
+	<array>
+		<dict><key>Minute</key><integer>1</integer></dict>
+		<dict><key>Minute</key><integer>3</integer></dict>
+		<dict><key>Minute</key><integer>31</integer></dict>
+		<dict><key>Minute</key><integer>33</integer></dict>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>/Users/dhruvpatel/flip-notifier</string>
+</dict>
+</plist>
