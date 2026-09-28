@@ -1,6 +1,6 @@
 {
  "mode": "live",
- "minScore": 99,
+ "minScore": 4,
  "concurrency": 8,
  "factor": 3.0,
  "atrLen": 10,
@@ -465,7 +465,7 @@
   "_comment": "2026-09-28: non-futures email only 🚀 early-rally gaps (bull FVG on >= rallyVolX x 20-bar avg volume; rally-lab.js). nonFuturesMode 'all' = every bull gap as before. Futures: both sides."
  },
  "extendedHours": true,
- "flipsEmailConfluence": true,
- "_flips_email_comment": "2026-09-28 (user): flip emails are ⭐ confluence only (a flip after a same-direction FVG on that ticker within 2h). minScore 99 = no flip qualifies on score alone. The old STRONG-only rule was minScore 4.",
+ "flipsEmailConfluence": false,
+ "_flips_email_comment": "2026-09-28 (user): flip emails are STRONG only (minScore 4). On 15m history STRONG was the best flip bucket (53% right at 4h, 57% at 24h, n=277). The earlier ⭐-only rule was flipsEmailConfluence true + minScore 99.",
  "tfMinutes": 15
 }
