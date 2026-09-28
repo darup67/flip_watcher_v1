@@ -1,6 +1,6 @@
 {
  "mode": "live",
- "minScore": 4,
+ "minScore": 99,
  "concurrency": 8,
  "factor": 3.0,
  "atrLen": 10,
@@ -462,5 +462,6 @@
   "onlyConfluence": false
  },
  "extendedHours": true,
- "flipsEmailConfluence": false
+ "flipsEmailConfluence": true,
+ "_flips_email_comment": "2026-09-28 (user): flip emails are ⭐ confluence only (a flip after a same-direction FVG on that ticker within 2h). minScore 99 = no flip qualifies on score alone. The old STRONG-only rule was minScore 4."
 }
