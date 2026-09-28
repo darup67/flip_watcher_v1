@@ -417,6 +417,18 @@
    "source": "yahoo",
    "ticker": "BRK-B",
    "group": "financials"
+  },
+  {
+   "tv": "US:NFLX",
+   "source": "yahoo",
+   "ticker": "NFLX",
+   "group": "mega tech"
+  },
+  {
+   "tv": "US:TSLA",
+   "source": "yahoo",
+   "ticker": "TSLA",
+   "group": "mega tech"
   }
  ]
 }
