@@ -52,7 +52,7 @@ async function yahoo(ticker) {
   const j = await getJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=30m&range=30d${ext}`);
   const res = j.chart.result[0];
   const q = res.indicators.quote[0];
-  return (res.timestamp || []).map((t, i) => ({ t: t * 1000, o: q.open[i], h: q.high[i], l: q.low[i], c: q.close[i] }))
+  return (res.timestamp || []).map((t, i) => ({ t: t * 1000, o: q.open[i], h: q.high[i], l: q.low[i], c: q.close[i], v: q.volume ? q.volume[i] || 0 : 0 }))
     .filter((b) => b.o != null && b.h != null && b.l != null && b.c != null);
 }
 
@@ -66,32 +66,32 @@ async function coinbase(product) {
     rows.push(...await getJSON(`https://api.exchange.coinbase.com/products/${product}/candles?granularity=900&start=${start}&end=${end}`));
   }
   const byBar = new Map();
-  for (const [ts, low, high, open, close] of rows) {
+  for (const [ts, low, high, open, close, volume] of rows) {
     const t = ts * 1000, k = Math.floor(t / TF_MS) * TF_MS;
     const parts = byBar.get(k) || [];
-    parts.push({ t, o: open, h: high, l: low, c: close });
+    parts.push({ t, o: open, h: high, l: low, c: close, v: volume || 0 });
     byBar.set(k, parts);
   }
   return [...byBar.entries()].sort((a, b) => a[0] - b[0]).map(([k, p]) => {
     p.sort((a, b) => a.t - b.t);
-    return { t: k, o: p[0].o, h: Math.max(...p.map((x) => x.h)), l: Math.min(...p.map((x) => x.l)), c: p[p.length - 1].c, parts: p.length };
+    return { t: k, o: p[0].o, h: Math.max(...p.map((x) => x.h)), l: Math.min(...p.map((x) => x.l)), c: p[p.length - 1].c, v: p.reduce((a, x) => a + x.v, 0), parts: p.length };
   }).filter((b, i, all) => b.parts === 2 || i === all.length - 1);
 }
 
 async function bitstamp(pair) {
   const j = await getJSON(`https://www.bitstamp.net/api/v2/ohlc/${pair}/?step=1800&limit=1000`);
-  return j.data.ohlc.map((b) => ({ t: +b.timestamp * 1000, o: +b.open, h: +b.high, l: +b.low, c: +b.close }));
+  return j.data.ohlc.map((b) => ({ t: +b.timestamp * 1000, o: +b.open, h: +b.high, l: +b.low, c: +b.close, v: +b.volume }));
 }
 
 async function binance(sym) {
   const j = await getJSON(`https://data-api.binance.vision/api/v3/klines?symbol=${sym}&interval=30m&limit=1000`);
-  return j.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4] }));
+  return j.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
 }
 
 async function kraken(pair) {
   const j = await getJSON(`https://api.kraken.com/0/public/OHLC?pair=${pair}&interval=30`);
   const key = Object.keys(j.result).find((k) => k !== 'last');
-  return j.result[key].map((b) => ({ t: b[0] * 1000, o: +b[1], h: +b[2], l: +b[3], c: +b[4] }));
+  return j.result[key].map((b) => ({ t: b[0] * 1000, o: +b[1], h: +b[2], l: +b[3], c: +b[4], v: +b[6] }));
 }
 
 const SOURCES = { yahoo, coinbase, bitstamp, binance, kraken };
@@ -196,8 +196,11 @@ async function evaluate(sym) {
   if (confirmed.length < CFG.atrLen + 5) throw new Error(`only ${confirmed.length} confirmed bars`);
   const regs = supertrendRegimes(confirmed, CFG.factor, CFG.atrLen);
   const n = confirmed.length;
-  const fvg = fvgAt(confirmed, n - 1, atrSeries(confirmed), (CFG.fvg && CFG.fvg.minAtr) || 0.2);
-  return { tv: sym.tv, name: sym.tv.split(':')[1], regime: regs[n - 1], prev: regs[n - 2], fvg, price: confirmed[n - 1].c, barTime: confirmed[n - 1].t, ageMin: Math.round((now - confirmed[n - 1].t - TF_MS) / 60000) };
+  const atrs = atrSeries(confirmed);
+  const fvg = fvgAt(confirmed, n - 1, atrs, (CFG.fvg && CFG.fvg.minAtr) || 0.2);
+  const prior = confirmed.slice(Math.max(0, n - 21), n - 1).map((b) => b.v || 0), vavg = prior.reduce((a, x) => a + x, 0) / (prior.length || 1);
+  const volx = vavg > 0 ? (confirmed[n - 1].v || 0) / vavg : 0;
+  return { tv: sym.tv, name: sym.tv.split(':')[1], regime: regs[n - 1], prev: regs[n - 2], fvg, volx, atr: atrs[n - 1], price: confirmed[n - 1].c, barTime: confirmed[n - 1].t, ageMin: Math.round((now - confirmed[n - 1].t - TF_MS) / 60000) };
 }
 
 // Run fn over items with at most `limit` in flight (keeps exchanges from throttling).
@@ -260,11 +263,17 @@ async function run() {
   const toSend = flips.filter((f) => f.setup.score >= minScore || (CFG.flipsEmailConfluence && f.star));
   const held = flips.filter((f) => !toSend.includes(f));
   if (toSend.length && CFG.mode === 'live') await sendEmail(toSend);
-  for (const f of fvgs) fs.appendFileSync(path.join(DIR, 'fvg-alerts.tsv'), `${new Date().toISOString()}\t${f.name}\t${f.fvg.side}\t${f.fvg.bottom}\t${f.fvg.top}\t${f.fvg.size.toFixed(2)}\tbar ${new Date(f.barTime).toISOString()}\t${(f.fvg.side === 'BULL') === (f.regime === 'BUY') ? 'star' : ''}\n`);
+  for (const f of fvgs) fs.appendFileSync(path.join(DIR, 'fvg-alerts.tsv'), `${new Date().toISOString()}\t${f.name}\t${f.fvg.side}\t${f.fvg.bottom}\t${f.fvg.top}\t${f.fvg.size.toFixed(2)}\tbar ${new Date(f.barTime).toISOString()}\t${(f.fvg.side === 'BULL') === (f.regime === 'BUY') ? 'star' : ''}\t${f.volx.toFixed(2)}\t${f.rally ? 'rally' : ''}\n`);
   // What you can trade (user, 2026-09-28): futures can be shorted, so both sides; everything else is
   // long-only, so bullish gaps only. All gaps are still logged above.
   const groupOf = Object.fromEntries(CFG.symbols.map((x) => [x.tv, x.group]));
-  const tradable = fvgs.filter((f) => groupOf[f.tv] === 'futures' || f.fvg.side === 'BULL');
+  // Non-futures (2026-09-28 rally lab): only volume-backed bull gaps are emailed, as 🚀 early-rally calls.
+  // Bull gap + volume >= rallyVolX x its 20-bar average reached a 2:1 rally (+2 ATR before -1 ATR)
+  // 30% / 41% of the time (older / newest third of history) vs 27% / 31% for any bar and 24% / 26%
+  // for the SuperTrend BUY flip, firing ~1 bar before the flip. Plain bull gaps: 23% / 30%.
+  const rallyX = (CFG.fvg && CFG.fvg.rallyVolX) || 2.5;
+  for (const f of fvgs) f.rally = groupOf[f.tv] !== 'futures' && f.fvg.side === 'BULL' && f.volx >= rallyX;
+  const tradable = fvgs.filter((f) => groupOf[f.tv] === 'futures' || (f.fvg.side === 'BULL' && (f.rally || (CFG.fvg && CFG.fvg.nonFuturesMode === 'all'))));
   for (const f of tradable) f.star = (f.fvg.side === 'BULL') === (f.regime === 'BUY');   // ⭐ gap with the trend
   const toMail = CFG.fvg && CFG.fvg.onlyConfluence ? tradable.filter((f) => f.star) : tradable;
   if (toMail.length && CFG.fvg && CFG.fvg.email && CFG.mode === 'live') sendFvgEmail(toMail);
@@ -297,14 +306,23 @@ function statLine(kind, key) {
     : `History (${key}, n=${v.n}): price came back into the gap ${p(v.tested)} of the time and held ${p(v.held)}; right way ${p(v['24h'].right)} after 24h.`;
 }
 
+function rallyVol() { return (CFG.fvg && CFG.fvg.rallyVolX) || 2.5; }
+
 function sendFvgEmail(fvgs) {
   const fmt = (x) => (x >= 1000 ? x.toLocaleString('en-US', { maximumFractionDigits: 0 }) : x.toPrecision(4));
   const closed = new Date(fvgs[0].barTime + TF_MS).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
   const bull = fvgs.filter((f) => f.fvg.side === 'BULL'), bear = fvgs.filter((f) => f.fvg.side === 'BEAR');
-  const stars = fvgs.filter((f) => f.star).length;
-  const subject = `🟩🟥 FVG ${closed}${stars ? ` ⭐${stars}` : ''}: ` + [bull.length ? `${bull.length} bull (${bull.map((f) => f.name).join(', ')})` : '', bear.length ? `${bear.length} bear (${bear.map((f) => f.name).join(', ')})` : ''].filter(Boolean).join(' · ');
-  const line = (f) => `${f.star ? '⭐' : '  '}${f.fvg.side === 'BULL' ? '🟩' : '🟥'} ${f.name}  gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}  (${f.fvg.size.toFixed(2)}× ATR)  last ${fmt(f.price)}  · trend ${f.regime}`;
-  const body = `Fair value gaps confirmed on the 30m bar that closed ${closed} ET. Bullish gaps for everything; bearish gaps for futures only (shortable).\n\n` + [...bull, ...bear].map(line).join('\n') +
+  const stars = fvgs.filter((f) => f.star).length, rallies = fvgs.filter((f) => f.rally);
+  const fut = fvgs.filter((f) => !f.rally);   // futures gaps (both sides), or plain bull gaps if nonFuturesMode = 'all'
+  const futTxt = fut.length ? `${fut.length} FVG (${fut.map((f) => `${f.name} ${f.fvg.side === 'BULL' ? '🟩' : '🟥'}`).join(', ')})` : '';
+  const subject = rallies.length
+    ? `🚀 Early rally ${closed}: ${rallies.map((f) => f.name).join(', ')}${futTxt ? ' · ' + futTxt : ''}`
+    : `🟩🟥 FVG ${closed}${stars ? ` ⭐${stars}` : ''}: ${futTxt}`;
+  const line = (f) => f.rally
+    ? `🚀 ${f.name}  EARLY RALLY · bull gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)} on ${f.volx.toFixed(1)}× volume · entry ~${fmt(f.price)}, stop ${fmt(f.price - f.atr)} (−1 ATR), target ${fmt(f.price + 2 * f.atr)} (+2 ATR) · trend ${f.regime}${f.star ? ' ⭐' : ''}`
+    : `${f.star ? '⭐' : '  '}${f.fvg.side === 'BULL' ? '🟩' : '🟥'} ${f.name}  gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}  (${f.fvg.size.toFixed(2)}× ATR)  last ${fmt(f.price)}  · trend ${f.regime}`;
+  const body = `Signals confirmed on the 30m bar that closed ${closed} ET.\n🚀 = early rally (stocks/ETFs/crypto): bull gap on ≥ ${rallyVol()}× average volume. Futures: bullish and bearish gaps (shortable).\n\n` + [...rallies, ...fut].map(line).join('\n') +
+    (rallies.length ? `\n\nEarly-rally history: +2 ATR before −1 ATR hit 30% (older) / 41% (recent) of the time vs 27% / 31% for a random bar; break-even for 2:1 is 33%. Edge is modest and market-dependent.` : '') +
     `\n\n⭐ = gap in the direction of the ticker's trend. ${statLine('gaps', '⭐ with trend')}\n${statLine('gaps', 'against trend')}` +
     `\n\nConfirmed = 3-candle gap complete on a closed bar, at least ${(CFG.fvg.minAtr || 0.2)}× ATR(14). Price often returns to fill a gap; not a signal on its own. Not advice.\n— Headless Flip Watcher`;
   mail(subject, body);
@@ -367,13 +385,14 @@ async function matrix(send) {
   const futNames = new Set(CFG.symbols.filter((x) => x.group === 'futures').map((x) => x.tv.split(':')[1]));
   const fvgFile = path.join(DIR, 'fvg-alerts.tsv');
   const gaps = fs.existsSync(fvgFile) ? fs.readFileSync(fvgFile, 'utf8').trim().split('\n').flatMap((line) => {
-    const [ts, name, side, bottom, top, size, , star] = line.split('\t');
-    return Date.parse(ts) > since && (side === 'BULL' || futNames.has(name))
-      ? [{ t: Date.parse(ts), name, side, bottom: +bottom, top: +top, size: +size, star: star === 'star' }] : [];
+    const [ts, name, side, bottom, top, size, , star, volx, rally] = line.split('\t');
+    const show = futNames.has(name) || (side === 'BULL' && (rally === 'rally' || (CFG.fvg && CFG.fvg.nonFuturesMode === 'all')));
+    return Date.parse(ts) > since && show
+      ? [{ t: Date.parse(ts), name, side, bottom: +bottom, top: +top, size: +size, star: star === 'star', volx: +volx || 0, rally: rally === 'rally' }] : [];
   }) : [];
   const px = (x) => (x >= 1000 ? x.toLocaleString('en-US', { maximumFractionDigits: 0 }) : x.toPrecision(4));
   const gapHtml = gaps.length
-    ? gaps.map((g) => `<li>${esc(et(g.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · ${g.star ? '⭐' : ''}${g.side === 'BULL' ? '🟩' : '🟥'} <b>${esc(g.name)}</b> ${px(g.bottom)} – ${px(g.top)} <span style="color:#888">${g.size.toFixed(2)}× ATR</span></li>`).join('\n')
+    ? gaps.map((g) => `<li>${esc(et(g.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · ${g.rally ? '🚀' : ''}${g.star ? '⭐' : ''}${g.side === 'BULL' ? '🟩' : '🟥'} <b>${esc(g.name)}</b>${g.rally ? ` <span style="color:#089981">early rally, ${g.volx.toFixed(1)}× vol</span>` : ''} ${px(g.bottom)} – ${px(g.top)} <span style="color:#888">${g.size.toFixed(2)}× ATR</span></li>`).join('\n')
     : '<li style="color:#888">none</li>';
   let board = '';
   try {
@@ -381,13 +400,13 @@ async function matrix(send) {
     const p = (x) => (x == null ? '–' : Math.round(100 * x) + '%');
     const td = (x, b) => `<td style="padding:2px 8px;text-align:right${b ? ';font-weight:600' : ''}">${x}</td>`;
     const fr = Object.entries(st.flips).map(([k, v]) => `<tr><td style="padding:2px 8px">${esc(k)}</td>${td(v.n)}${td(p(v['4h'].right))}${td(p(v['24h'].right), 1)}</tr>`).join('\n');
-    const gr = Object.entries(st.gaps).map(([k, v]) => `<tr><td style="padding:2px 8px">${esc(k)}</td>${td(v.n)}${td(p(v.tested))}${td(p(v.held), 1)}${td(p(v['24h'].right))}</tr>`).join('\n');
+    const gr = Object.entries(st.gaps).map(([k, v]) => `<tr><td style="padding:2px 8px">${esc(k)}</td>${td(v.n)}${td(p(v.tested))}${td(p(v.held), 1)}${td(p(v['24h'].right))}${td(p(v.rally21))}</tr>`).join('\n');
     const th = (a) => a.map((x) => `<th style="padding:2px 8px;text-align:right;color:#666;font-weight:400">${x}</th>`).join('');
     board = `<h3 style="margin:18px 0 4px">Scoreboard: what happened after past signals (since ${esc(st.from.slice(0, 10))})</h3>
 <table cellspacing="0" style="font-size:13px;border-collapse:collapse"><tr><th style="text-align:left;padding:2px 8px">Flips</th>${th(['n', 'right 4h', 'right 24h'])}</tr>
 ${fr}
 </table>
-<table cellspacing="0" style="font-size:13px;border-collapse:collapse;margin-top:8px"><tr><th style="text-align:left;padding:2px 8px">Tradable gaps</th>${th(['n', 'tested 24h', 'held', 'right 24h'])}</tr>
+<table cellspacing="0" style="font-size:13px;border-collapse:collapse;margin-top:8px"><tr><th style="text-align:left;padding:2px 8px">Tradable gaps</th>${th(['n', 'tested 24h', 'held', 'right 24h', '2:1 rally'])}</tr>
 ${gr}
 </table>
 <div style="color:#666;font-size:12px">"Right" = moved in the signal's direction (BUY/bull long, SELL/bear short). Held = came back into the gap without closing through it. Before fees; history, not advice.</div>`;
@@ -402,8 +421,8 @@ ${rows.join('\n')}
 <ul style="margin:0;padding-left:18px">
 ${changeHtml}
 </ul>
-<h3 style="margin:18px 0 4px">FVGs since last report (${gaps.length})</h3>
-<div style="color:#666;font-size:12px;margin-bottom:4px">Bullish gaps for everything, bearish gaps for futures only (shortable); ≥ ${(CFG.fvg && CFG.fvg.minAtr) || 0.2}× ATR on closed 30m bars.</div>
+<h3 style="margin:18px 0 4px">🚀 Early rallies & futures FVGs since last report (${gaps.length})</h3>
+<div style="color:#666;font-size:12px;margin-bottom:4px">🚀 = stocks/ETFs/crypto bull gap on ≥ ${(CFG.fvg && CFG.fvg.rallyVolX) || 2.5}× average volume (early rally). Futures: bullish and bearish gaps. Gaps ≥ ${(CFG.fvg && CFG.fvg.minAtr) || 0.2}× ATR on closed 30m bars.</div>
 <ul style="margin:0;padding-left:18px">
 ${gapHtml}
 </ul>
@@ -511,7 +530,7 @@ function compare(hours, headFile = ALERTS) {
   if (onlyChart.length) console.log('only chart:\n  ' + onlyChart.map(fmt).join('\n  '));
 }
 
-module.exports = { CFG, TF_MS, DIR, SOURCES, pool, supertrendRegimes, scoreCore, atrSeries, fvgAt };
+module.exports = { CFG, TF_MS, DIR, SOURCES, pool, supertrendRegimes, scoreCore, atrSeries, fvgAt, sendFvgEmail };
 
 if (require.main === module) {
 const arg = process.argv[2];

@@ -459,7 +459,10 @@
  "fvg": {
   "email": true,
   "minAtr": 0.5,
-  "onlyConfluence": false
+  "onlyConfluence": false,
+  "rallyVolX": 2.5,
+  "nonFuturesMode": "rally",
+  "_comment": "2026-09-28: non-futures email only 🚀 early-rally gaps (bull FVG on >= rallyVolX x 20-bar avg volume; rally-lab.js). nonFuturesMode 'all' = every bull gap as before. Futures: both sides."
  },
  "extendedHours": true,
  "flipsEmailConfluence": true,

@@ -56,7 +56,11 @@ async function computeStats() {
         (flipsByT.get(t) || flipsByT.set(t, []).get(t)).push({ s, i, side: s.regs[i] });
       }
       const g = s.regs[i] ? fvgAt(s.bars, i, s.atr, minAtr) : null;
-      if (g && (g.side === 'BULL' || s.fut)) gaps.push({ s, i, g, star: (g.side === 'BULL') === (s.regs[i] === 'BUY') });
+      if (g && (g.side === 'BULL' || s.fut)) {
+        const prior = s.bars.slice(Math.max(0, i - 20), i).map((b) => b.v || 0), avg = prior.reduce((a, x) => a + x, 0) / (prior.length || 1);
+        const volx = avg > 0 ? (s.bars[i].v || 0) / avg : 0;
+        gaps.push({ s, i, g, star: (g.side === 'BULL') === (s.regs[i] === 'BUY'), rally: !s.fut && g.side === 'BULL' && volx >= ((CFG.fvg && CFG.fvg.rallyVolX) || 2.5) });
+      }
     }
   }
   const regimeAt = (s, t) => {   // regime as of the latest bar at or before t
@@ -81,7 +85,12 @@ async function computeStats() {
     }
   }
 
-  const gapRows = gaps.map(({ s, i, g, star }) => {
+  const rally21 = (s, i) => {   // +2 ATR before -1 ATR within 48 bars (the tested early-rally setup)
+    const up = s.bars[i].c + 2 * s.atr[i], dn = s.bars[i].c - s.atr[i];
+    for (let j = i + 1; j <= i + 48 && j < s.bars.length; j++) { if (s.bars[j].l <= dn) return 0; if (s.bars[j].h >= up) return 1; }
+    return i + 48 < s.bars.length ? 0 : null;
+  };
+  const gapRows = gaps.map(({ s, i, g, star, rally }) => {
     const dir = g.side === 'BULL' ? 1 : -1, entry = s.bars[i].c, end = s.bars[i].t + TF_MS + H['24h'];
     const complete = s.bars[s.bars.length - 1].t + TF_MS >= end;
     let tested = false, broken = false;
@@ -92,7 +101,7 @@ async function computeStats() {
     }
     const ret = {};
     for (const k of ['4h', '24h']) { const x = exitPrice(s.bars, i, H[k]); ret[k] = x == null ? null : dir * (x / entry - 1); }
-    return { star, fut: s.fut, complete, tested, broken, ret };
+    return { star, rally, fut: s.fut, complete, tested, broken, ret, r21: g.side === 'BULL' ? rally21(s, i) : null };
   });
 
   const summarize = (rows, keys) => {
@@ -111,9 +120,10 @@ async function computeStats() {
     const c = rows.filter((x) => x.complete);
     return { ...summarize(rows, ['4h', '24h']), done24h: c.length,
              tested: pct(c.map((x) => x.tested)), broken: pct(c.map((x) => x.broken)),
-             held: pct(c.filter((x) => x.tested).map((x) => !x.broken)) };
+             held: pct(c.filter((x) => x.tested).map((x) => !x.broken)),
+             rally21: pct(rows.map((x) => x.r21).filter((x) => x != null).map(Boolean)) };
   };
-  const gapStats = { '⭐ with trend': gstats(gapRows.filter((x) => x.star)), 'against trend': gstats(gapRows.filter((x) => !x.star)),
+  const gapStats = { '🚀 early rally': gstats(gapRows.filter((x) => x.rally)), '⭐ with trend': gstats(gapRows.filter((x) => x.star)), 'against trend': gstats(gapRows.filter((x) => !x.star)),
                      'all tradable': gstats(gapRows) };
   const first = Math.min(...series.map((s) => s.bars[0].t));
   const stats = { updated: new Date().toISOString(), from: new Date(first).toISOString(), symbols: series.length,
@@ -131,9 +141,9 @@ function fmt(stats) {
   for (const [k, v] of Object.entries(stats.flips))
     L.push(`${k.padEnd(14)} ${String(v.n).padStart(5)}   ${p(v['1h'].right)}      ${p(v['4h'].right)}      ${p(v['24h'].right)}      ${r(v['4h'].median)}     ${r(v['24h'].median)}`);
   L.push('', `GAPS (bull all, bear futures only; ≥ ${stats.minAtr}× ATR; within 24h)`,
-    '                  n   tested  broken  held*   right 4h  right 24h  median 24h');
+    '                  n   tested  broken  held*   right 4h  right 24h  median 24h  2:1 rally');
   for (const [k, v] of Object.entries(stats.gaps))
-    L.push(`${k.padEnd(14)} ${String(v.n).padStart(5)}    ${p(v.tested)}    ${p(v.broken)}   ${p(v.held)}      ${p(v['4h'].right)}      ${p(v['24h'].right)}     ${r(v['24h'].median)}`);
+    L.push(`${k.padEnd(14)} ${String(v.n).padStart(5)}    ${p(v.tested)}    ${p(v.broken)}   ${p(v.held)}      ${p(v['4h'].right)}      ${p(v['24h'].right)}     ${r(v['24h'].median)}     ${p(v.rally21)}`);
   L.push('', '* held = came back into the gap and did not close through it. Before fees and slippage; history, not advice.');
   return L.join('\n');
 }
