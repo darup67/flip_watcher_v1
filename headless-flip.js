@@ -256,7 +256,11 @@ async function run() {
   const held = flips.filter((f) => f.setup.score < minScore);
   if (toSend.length && CFG.mode === 'live') await sendEmail(toSend);
   for (const f of fvgs) fs.appendFileSync(path.join(DIR, 'fvg-alerts.tsv'), `${new Date().toISOString()}\t${f.name}\t${f.fvg.side}\t${f.fvg.bottom}\t${f.fvg.top}\t${f.fvg.size.toFixed(2)}\tbar ${new Date(f.barTime).toISOString()}\n`);
-  if (fvgs.length && CFG.fvg && CFG.fvg.email && CFG.mode === 'live') sendFvgEmail(fvgs);
+  // What you can trade (user, 2026-09-28): futures can be shorted, so both sides; everything else is
+  // long-only, so bullish gaps only. All gaps are still logged above.
+  const groupOf = Object.fromEntries(CFG.symbols.map((x) => [x.tv, x.group]));
+  const tradable = fvgs.filter((f) => groupOf[f.tv] === 'futures' || f.fvg.side === 'BULL');
+  if (tradable.length && CFG.fvg && CFG.fvg.email && CFG.mode === 'live') sendFvgEmail(tradable);
   log(`${flips.length ? 'FLIPS ' + flips.map((f) => `${f.name}→${f.regime} [${f.setup.label}:${f.setup.score}]`).join(' ') + (held.length ? ` · held back ${held.length} WEAK` : '') : 'no flips'} · ${ok.length}/${results.length} ok ` + (chartPaused ? '' : ` · agree with chart ${agree}/${ok.length}`) +
     (diff.length ? ` · differ: ${diff.join(' ')}` : '') + (errors.length ? ` · ERR ${errors.join('; ')}` : '') + ` · mode ${CFG.mode}`);
 }
@@ -274,7 +278,7 @@ function sendFvgEmail(fvgs) {
   const bull = fvgs.filter((f) => f.fvg.side === 'BULL'), bear = fvgs.filter((f) => f.fvg.side === 'BEAR');
   const subject = `🟩🟥 FVG ${closed}: ` + [bull.length ? `${bull.length} bull (${bull.map((f) => f.name).join(', ')})` : '', bear.length ? `${bear.length} bear (${bear.map((f) => f.name).join(', ')})` : ''].filter(Boolean).join(' · ');
   const line = (f) => `${f.fvg.side === 'BULL' ? '🟩' : '🟥'} ${f.name}  gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}  (${f.fvg.size.toFixed(2)}× ATR)  last ${fmt(f.price)}  · trend ${f.regime}`;
-  const body = `Fair value gaps confirmed on the 30m bar that closed ${closed} ET.\n\n` + [...bull, ...bear].map(line).join('\n') +
+  const body = `Fair value gaps confirmed on the 30m bar that closed ${closed} ET. Bullish gaps for everything; bearish gaps for futures only (shortable).\n\n` + [...bull, ...bear].map(line).join('\n') +
     `\n\nConfirmed = 3-candle gap complete on a closed bar, at least ${(CFG.fvg.minAtr || 0.2)}× ATR(14). Price often returns to fill a gap; not a signal on its own. Not advice.\n— Headless Flip Watcher`;
   mail(subject, body);
 }
