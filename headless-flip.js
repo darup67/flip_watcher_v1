@@ -120,7 +120,7 @@ function supertrendRegimes(bars, factor, atrLen) {
 }
 
 // ---------- setup scoring (same rules as flip-notifier.js scoreSetup) ----------
-// Correlation 0-2 · trend alignment 0-2 · stability 0-1 → WEAK 0-1 / MODERATE 2-3 / STRONG 4-5
+// Correlation 0-2 (thresholds scale: 16% / 8% of the watchlist) · trend alignment 0-2 · stability 0-1 → WEAK 0-1 / MODERATE 2-3 / STRONG 4-5
 
 const SCORE_EMOJI = { STRONG: '🔥', MODERATE: '⚡', WEAK: '💤' };
 
@@ -143,9 +143,10 @@ function scoreSetup(flip, runFlips, regimes) {
   // 1. Correlation: same-direction flips on this bar (this run + earlier runs for the same bar)
   const names = new Set(runFlips.filter((f) => f.regime === flip.regime).map((f) => f.name));
   prior.filter((p) => p.bar === flip.barTime && p.to === flip.regime).forEach((p) => names.add(p.name));
-  const same = names.size;
-  if (same >= 4) { score += 2; factors.push(`${same} symbols flipped ${flip.regime} together`); }
-  else if (same >= 2) { score += 1; factors.push(`${same} correlated ${flip.regime} flips`); }
+  const same = names.size, n = Object.keys(regimes).length || CFG.symbols.length;
+  const strongN = Math.max(4, Math.ceil(0.16 * n)), mildN = Math.max(2, Math.ceil(0.08 * n));   // 25 symbols → 4 / 2
+  if (same >= strongN) { score += 2; factors.push(`${same} symbols flipped ${flip.regime} together`); }
+  else if (same >= mildN) { score += 1; factors.push(`${same} correlated ${flip.regime} flips`); }
   else factors.push('isolated flip');
 
   // 2. Trend alignment against the post-flip regime map
@@ -175,11 +176,20 @@ async function evaluate(sym) {
   return { tv: sym.tv, name: sym.tv.split(':')[1], regime: regs[n - 1], prev: regs[n - 2], barTime: confirmed[n - 1].t, ageMin: Math.round((now - confirmed[n - 1].t - TF_MS) / 60000) };
 }
 
-async function evaluateAll() {
-  const results = await Promise.all(CFG.symbols.map(async (s) => {
-    try { return await evaluate(s); } catch (e) { return { tv: s.tv, name: s.tv.split(':')[1], error: e.message }; }
+// Run fn over items with at most `limit` in flight (keeps exchanges from throttling).
+async function pool(items, limit, fn) {
+  const out = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) { const i = next++; out[i] = await fn(items[i]); }
   }));
-  return results;
+  return out;
+}
+
+async function evaluateAll() {
+  return pool(CFG.symbols, CFG.concurrency || 8, async (s) => {
+    try { return await evaluate(s); } catch (e) { return { tv: s.tv, name: s.tv.split(':')[1], error: e.message }; }
+  });
 }
 
 function readJSON(f, dflt) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return dflt; } }
@@ -262,7 +272,7 @@ async function status() {
 async function replay(hours) {
   // Recompute historical flips from bar history, write them to a temp tsv, compare.
   const since = Date.now() - hours * 3600e3, lines = [];
-  await Promise.all(CFG.symbols.map(async (sym) => {
+  await pool(CFG.symbols, CFG.concurrency || 8, async (sym) => {
     try {
       const bars = (await SOURCES[sym.source](sym.ticker)).filter((b) => b.t + TF_MS <= Date.now());
       const regs = supertrendRegimes(bars, CFG.factor, CFG.atrLen);
@@ -272,7 +282,7 @@ async function replay(hours) {
           lines.push(`${new Date(close).toISOString()}\tr\t${sym.tv.split(':')[1]} ${regs[i - 1]} → ${regs[i]}\n`);
       }
     } catch (e) { console.log(`${sym.tv}: ${e.message}`); }
-  }));
+  });
   const tmp = path.join(DIR, 'headless-replay.tsv');
   fs.writeFileSync(tmp, lines.sort().join(''));
   compare(hours, tmp);
