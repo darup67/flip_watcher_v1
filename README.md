@@ -1,3 +1,5 @@
+> **2026-09-28:** the chart-based flip watcher (`flip-notifier.js`, `healthcheck.js`, `save-chart.mjs`) and the Kalshi watcher (`kalshi-watcher.js`) were **retired**; their code is in git history and their LaunchAgents are in `~/Library/LaunchAgents.retired-20260928/`. The live system is `headless-flip.js` (signals), trade-core (shared bars and the signal ledger), and the 08:55 / 16:30 briefs.
+
 # Flip Watcher App (Kalshi + TradingView) 📈📉🤑
 
 Flip Watcher App — v1 — Buy/Sell Signals
