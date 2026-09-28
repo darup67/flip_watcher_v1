@@ -18,7 +18,7 @@ const fs = require('fs');
 const path = require('path');
 const { CFG, TF_MS, DIR, SOURCES, pool, supertrendRegimes, scoreCore, atrSeries, fvgAt } = require('./headless-flip.js');
 
-const OUT = path.join(DIR, 'headless-stats.json');
+const OUT = path.join(DIR, process.env.HEADLESS_TF ? `headless-stats-${process.env.HEADLESS_TF}m.json` : 'headless-stats.json');   // research runs don't touch the live file
 const H = { '1h': 3600e3, '4h': 4 * 3600e3, '24h': 24 * 3600e3 };
 const CONFLUENCE_MS = 2 * 3600e3;
 const DAY_BARS = Math.round(24 * 3600e3 / TF_MS);   // 24h of bars at the configured timeframe
@@ -82,7 +82,7 @@ async function computeStats() {
                                     && (x.g.side === 'BULL') === (f.side === 'BUY'));
       const dir = f.side === 'BUY' ? 1 : -1, entry = f.s.bars[f.i].c, ret = {};
       for (const [k, ms] of Object.entries(H)) { const x = exitPrice(f.s.bars, f.i, ms); ret[k] = x == null ? null : dir * (x / entry - 1); }
-      flipRows.push({ label, star, ret, fut: f.s.fut });
+      flipRows.push({ label, star, ret, fut: f.s.fut, t });
     }
   }
 
@@ -102,7 +102,7 @@ async function computeStats() {
     }
     const ret = {};
     for (const k of ['4h', '24h']) { const x = exitPrice(s.bars, i, H[k]); ret[k] = x == null ? null : dir * (x / entry - 1); }
-    return { star, rally, fut: s.fut, complete, tested, broken, ret, r21: g.side === 'BULL' ? rally21(s, i) : null };
+    return { star, rally, fut: s.fut, complete, tested, broken, ret, r21: g.side === 'BULL' ? rally21(s, i) : null, t: s.bars[i].t };
   });
 
   const summarize = (rows, keys) => {
@@ -126,9 +126,27 @@ async function computeStats() {
   };
   const gapStats = { '🚀 early rally': gstats(gapRows.filter((x) => x.rally)), '⭐ with trend': gstats(gapRows.filter((x) => x.star)), 'against trend': gstats(gapRows.filter((x) => !x.star)),
                      'all tradable': gstats(gapRows) };
+  // Trust check: does each group hold in both halves of history, and does it beat random entry?
+  const all = flipRows.concat(gapRows).map((x) => x.t).sort((a, b) => a - b), mid = all[all.length >> 1];
+  const half = (rows, get) => [rows.filter((x) => x.t < mid), rows.filter((x) => x.t >= mid)].map((h) => {
+    const v = h.map(get).filter((x) => x != null); return { n: v.length, rate: pct(v.map(Boolean)) };
+  });
+  const r24 = (x) => (x.ret['24h'] == null ? null : x.ret['24h'] > 0), r21 = (x) => x.r21;
+  const baseRows = [];   // random entry: every 8th bar, long, non-futures
+  for (const s of series) if (!s.fut) for (let i = 30; i < s.bars.length; i += 8) {
+    const x = exitPrice(s.bars, i, H['24h']); baseRows.push({ t: s.bars[i].t, ret: { '24h': x == null ? null : x / s.bars[i].c - 1 }, r21: rally21(s, i) });
+  }
+  const split = {
+    'flips STRONG (right 24h)': half(flipRows.filter((x) => x.label === 'STRONG'), r24),
+    'flips ⭐ (right 24h)': half(flipRows.filter((x) => x.star), r24),
+    'flips all (right 24h)': half(flipRows, r24),
+    '🚀 early rally (2:1)': half(gapRows.filter((x) => x.rally), r21),
+    'random long entry (2:1)': half(baseRows, r21),
+    'random long entry (up 24h)': half(baseRows, r24),
+  };
   const first = Math.min(...series.map((s) => s.bars[0].t));
   const stats = { updated: new Date().toISOString(), from: new Date(first).toISOString(), symbols: series.length,
-                  minAtr, flips, gaps: gapStats };
+                  minAtr, flips, gaps: gapStats, split, tf: TF_MS / 60000 };
   fs.writeFileSync(OUT, JSON.stringify(stats, null, 1));
   return stats;
 }

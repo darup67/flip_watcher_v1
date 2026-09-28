@@ -22,7 +22,7 @@ const STATE_FILE = path.join(DIR, 'headless-state.json');
 const ALERTS = path.join(DIR, 'headless-alerts.tsv');
 const LOG = path.join(DIR, 'headless-flip.log');
 // Bar size for the whole universe (CFG.tfMinutes; 15 since 2026-09-28, was 30). Every source follows it.
-const TF_MIN = CFG.tfMinutes || 30;
+const TF_MIN = +process.env.HEADLESS_TF || CFG.tfMinutes || 30;   // HEADLESS_TF: research override only
 const TF_MS = TF_MIN * 60 * 1000;
 
 const log = (msg) => {
@@ -51,14 +51,14 @@ async function yahoo(ticker) {
   // Pre-market + after-hours bars for stocks (CFG.extendedHours, added 2026-09-28) so the 8:00 AM matrix
   // and pre-market flips/gaps are live. Futures (=F) trade nearly 24h and ignore the flag.
   const ext = CFG.extendedHours && !ticker.endsWith('=F') ? '&includePrePost=true' : '';
-  const j = await getJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=${TF_MIN}m&range=30d${ext}`);
+  const j = await getJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=${TF_MIN}m&range=${TF_MIN >= 60 ? 90 : 30}d${ext}`);
   const res = j.chart.result[0];
   const q = res.indicators.quote[0];
   return (res.timestamp || []).map((t, i) => ({ t: t * 1000, o: q.open[i], h: q.high[i], l: q.low[i], c: q.close[i], v: q.volume ? q.volume[i] || 0 : 0 }))
     .filter((b) => b.o != null && b.h != null && b.l != null && b.c != null)
     // With includePrePost Yahoo also returns off-grid points (e.g. 5:26:40 PM, zero volume): a stale
     // last trade, not a 30m bar. One produced a false BLK flip + 2.9x ATR "gap" (2026-09-28 18:01).
-    .filter((b) => b.t % TF_MS === 0);
+    .filter((b) => b.t % Math.min(TF_MS, 1800e3) === 0);   // hourly stock bars sit on :30 (9:30, 10:30…)
 }
 
 async function coinbase(product) {
@@ -89,7 +89,7 @@ async function bitstamp(pair) {
 }
 
 async function binance(sym) {
-  const j = await getJSON(`https://data-api.binance.vision/api/v3/klines?symbol=${sym}&interval=${TF_MIN}m&limit=1000`);
+  const j = await getJSON(`https://data-api.binance.vision/api/v3/klines?symbol=${sym}&interval=${TF_MIN >= 60 ? TF_MIN / 60 + 'h' : TF_MIN + 'm'}&limit=1000`);
   return j.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
 }
 
