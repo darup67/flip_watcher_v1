@@ -119,6 +119,50 @@ function supertrendRegimes(bars, factor, atrLen) {
   return out;
 }
 
+// ---------- setup scoring (same rules as flip-notifier.js scoreSetup) ----------
+// Correlation 0-2 · trend alignment 0-2 · stability 0-1 → WEAK 0-1 / MODERATE 2-3 / STRONG 4-5
+
+const SCORE_EMOJI = { STRONG: '🔥', MODERATE: '⚡', WEAK: '💤' };
+
+function priorFlips(hours) {
+  if (!fs.existsSync(ALERTS)) return [];
+  const cutoff = Date.now() - hours * 3600e3;
+  return fs.readFileSync(ALERTS, 'utf8').trim().split('\n').flatMap((line) => {
+    const [ts, , detail, bar] = line.split('\t');
+    const m = detail && detail.match(/^(\S+) (?:BUY|SELL) → (BUY|SELL)/);
+    if (!m || Date.parse(ts) < cutoff) return [];
+    return [{ t: Date.parse(ts), name: m[1], to: m[2], bar: bar ? Date.parse(bar.replace('bar ', '')) : null }];
+  });
+}
+
+function scoreSetup(flip, runFlips, regimes) {
+  const factors = [];
+  let score = 0;
+  const prior = priorFlips(24);
+
+  // 1. Correlation: same-direction flips on this bar (this run + earlier runs for the same bar)
+  const names = new Set(runFlips.filter((f) => f.regime === flip.regime).map((f) => f.name));
+  prior.filter((p) => p.bar === flip.barTime && p.to === flip.regime).forEach((p) => names.add(p.name));
+  const same = names.size;
+  if (same >= 4) { score += 2; factors.push(`${same} symbols flipped ${flip.regime} together`); }
+  else if (same >= 2) { score += 1; factors.push(`${same} correlated ${flip.regime} flips`); }
+  else factors.push('isolated flip');
+
+  // 2. Trend alignment against the post-flip regime map
+  const vals = Object.values(regimes), total = vals.length;
+  const side = vals.filter((v) => v === flip.regime).length, pct = total ? side / total : 0;
+  if (pct >= 0.6) { score += 2; factors.push(`trend-aligned (${side}/${total} now ${flip.regime})`); }
+  else if (pct >= 0.4) { score += 1; factors.push(`mixed field (${side}/${total} ${flip.regime})`); }
+  else factors.push(`counter-trend (only ${side}/${total} ${flip.regime})`);
+
+  // 3. Stability: earlier flips of this symbol in 24h
+  const recent = prior.filter((p) => p.name === flip.name).length;
+  if (recent === 0) { score += 1; factors.push('fresh move (no flips in 24h)'); }
+  else factors.push(`choppy (${recent} flip${recent > 1 ? 's' : ''} in 24h)`);
+
+  return { score, label: score >= 4 ? 'STRONG' : score >= 2 ? 'MODERATE' : 'WEAK', factors };
+}
+
 // ---------- core ----------
 
 async function evaluate(sym) {
@@ -166,12 +210,17 @@ async function run() {
   const agree = ok.filter((r) => chart[r.tv] === r.regime).length;
   const diff = ok.filter((r) => chart[r.tv] && chart[r.tv] !== r.regime).map((r) => `${r.name}(h:${r.regime}/c:${chart[r.tv]})`);
 
+  // Score BEFORE appending this run's flips, so stability sees only earlier flips.
+  for (const f of flips) f.setup = scoreSetup(f, flips, state.regimes);
   for (const f of flips) {
     const arrow = f.regime === 'BUY' ? '⬆️' : '⬇️';
-    fs.appendFileSync(ALERTS, `${new Date().toISOString()}\t${arrow} ${f.name} → ${f.regime}\t${f.name} ${f.prev === f.regime ? '?' : (f.regime === 'BUY' ? 'SELL' : 'BUY')} → ${f.regime}\tbar ${new Date(f.barTime).toISOString()}\n`);
+    fs.appendFileSync(ALERTS, `${new Date().toISOString()}\t${arrow} ${f.name} → ${f.regime}\t${f.name} ${f.regime === 'BUY' ? 'SELL' : 'BUY'} → ${f.regime}\tbar ${new Date(f.barTime).toISOString()}\t${f.setup.label}:${f.setup.score}\n`);
   }
-  if (flips.length && CFG.mode === 'live') await sendEmail(flips);
-  log(`${flips.length ? 'FLIPS ' + flips.map((f) => `${f.name}→${f.regime}`).join(' ') : 'no flips'} · ${ok.length}/${results.length} ok ` + (chartPaused ? '' : ` · agree with chart ${agree}/${ok.length}`) +
+  const minScore = CFG.minScore ?? 2;
+  const toSend = flips.filter((f) => f.setup.score >= minScore);
+  const held = flips.filter((f) => f.setup.score < minScore);
+  if (toSend.length && CFG.mode === 'live') await sendEmail(toSend);
+  log(`${flips.length ? 'FLIPS ' + flips.map((f) => `${f.name}→${f.regime} [${f.setup.label}:${f.setup.score}]`).join(' ') + (held.length ? ` · held back ${held.length} WEAK` : '') : 'no flips'} · ${ok.length}/${results.length} ok ` + (chartPaused ? '' : ` · agree with chart ${agree}/${ok.length}`) +
     (diff.length ? ` · differ: ${diff.join(' ')}` : '') + (errors.length ? ` · ERR ${errors.join('; ')}` : '') + ` · mode ${CFG.mode}`);
 }
 
@@ -180,8 +229,11 @@ async function sendEmail(flips) {
   const { execFileSync } = require('child_process');
   const env = { ...process.env };
   if (!env.FLIP_GMAIL_APP_PASSWORD) env.FLIP_GMAIL_APP_PASSWORD = execFileSync('security', ['find-generic-password', '-a', 'darup67@gmail.com', '-s', 'flip-notifier-gmail', '-w']).toString().trim();
-  const subject = `${flips.length === 1 ? (flips[0].regime === 'BUY' ? '⬆️' : '⬇️') : '🔀' + flips.length} ${flips.map((f) => f.name + ' → ' + f.regime).join(' · ')}`;
-  const body = flips.map((f) => `${f.name}: ${f.regime === 'BUY' ? 'SELL → BUY' : 'BUY → SELL'} (30m bar ${new Date(f.barTime).toISOString()})`).join('\n') + '\n\n— Headless Flip Watcher (exchange data, no TradingView)';
+  const best = flips.some((f) => f.setup.label === 'STRONG') ? '🔥' : '⚡';
+  const subject = `${best} ${flips.map((f) => `${f.regime === 'BUY' ? '⬆️' : '⬇️'} ${f.name} → ${f.regime}`).join(' · ')}`;
+  const body = flips.map((f) => `${f.regime === 'BUY' ? '⬆️' : '⬇️'} ${f.name} → ${f.regime}  ${SCORE_EMOJI[f.setup.label]} ${f.setup.label} (${f.setup.score}/5)\n` +
+    f.setup.factors.map((x) => `  · ${x}`).join('\n') + `\n  · 30m bar closed ${new Date(f.barTime + TF_MS).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' })} ET`).join('\n\n') +
+    '\n\n— Headless Flip Watcher (exchange data, no TradingView)';
   execFileSync(process.execPath, [path.join(DIR, 'send-email.js'), subject, body], { env, timeout: 35000, stdio: 'ignore' });
 }
 
