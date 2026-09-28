@@ -21,6 +21,7 @@ const { CFG, TF_MS, DIR, SOURCES, pool, supertrendRegimes, scoreCore, atrSeries,
 const OUT = path.join(DIR, 'headless-stats.json');
 const H = { '1h': 3600e3, '4h': 4 * 3600e3, '24h': 24 * 3600e3 };
 const CONFLUENCE_MS = 2 * 3600e3;
+const DAY_BARS = Math.round(24 * 3600e3 / TF_MS);   // 24h of bars at the configured timeframe
 
 function exitPrice(bars, i, ms) {
   // close of the last bar that closed by entry + ms; null if history doesn't reach that far yet
@@ -85,10 +86,10 @@ async function computeStats() {
     }
   }
 
-  const rally21 = (s, i) => {   // +2 ATR before -1 ATR within 48 bars (the tested early-rally setup)
+  const rally21 = (s, i) => {   // +2 ATR before -1 ATR within 24h (the tested early-rally setup)
     const up = s.bars[i].c + 2 * s.atr[i], dn = s.bars[i].c - s.atr[i];
-    for (let j = i + 1; j <= i + 48 && j < s.bars.length; j++) { if (s.bars[j].l <= dn) return 0; if (s.bars[j].h >= up) return 1; }
-    return i + 48 < s.bars.length ? 0 : null;
+    for (let j = i + 1; j <= i + DAY_BARS && j < s.bars.length; j++) { if (s.bars[j].l <= dn) return 0; if (s.bars[j].h >= up) return 1; }
+    return i + DAY_BARS < s.bars.length ? 0 : null;
   };
   const gapRows = gaps.map(({ s, i, g, star, rally }) => {
     const dir = g.side === 'BULL' ? 1 : -1, entry = s.bars[i].c, end = s.bars[i].t + TF_MS + H['24h'];
