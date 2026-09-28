@@ -258,7 +258,7 @@ async function run() {
   }
   const minScore = CFG.minScore ?? 2;
   const toSend = flips.filter((f) => f.setup.score >= minScore || (CFG.flipsEmailConfluence && f.star));
-  const held = flips.filter((f) => f.setup.score < minScore);
+  const held = flips.filter((f) => !toSend.includes(f));
   if (toSend.length && CFG.mode === 'live') await sendEmail(toSend);
   for (const f of fvgs) fs.appendFileSync(path.join(DIR, 'fvg-alerts.tsv'), `${new Date().toISOString()}\t${f.name}\t${f.fvg.side}\t${f.fvg.bottom}\t${f.fvg.top}\t${f.fvg.size.toFixed(2)}\tbar ${new Date(f.barTime).toISOString()}\t${(f.fvg.side === 'BULL') === (f.regime === 'BUY') ? 'star' : ''}\n`);
   // What you can trade (user, 2026-09-28): futures can be shorted, so both sides; everything else is
@@ -268,7 +268,7 @@ async function run() {
   for (const f of tradable) f.star = (f.fvg.side === 'BULL') === (f.regime === 'BUY');   // ⭐ gap with the trend
   const toMail = CFG.fvg && CFG.fvg.onlyConfluence ? tradable.filter((f) => f.star) : tradable;
   if (toMail.length && CFG.fvg && CFG.fvg.email && CFG.mode === 'live') sendFvgEmail(toMail);
-  log(`${flips.length ? 'FLIPS ' + flips.map((f) => `${f.name}→${f.regime} [${f.setup.label}:${f.setup.score}]`).join(' ') + (held.length ? ` · held back ${held.length} WEAK` : '') : 'no flips'} · ${ok.length}/${results.length} ok ` + (chartPaused ? '' : ` · agree with chart ${agree}/${ok.length}`) +
+  log(`${flips.length ? 'FLIPS ' + flips.map((f) => `${f.name}→${f.regime} [${f.setup.label}:${f.setup.score}]`).join(' ') + (held.length ? ` · held back ${held.length} (not emailed)` : '') : 'no flips'} · ${ok.length}/${results.length} ok ` + (chartPaused ? '' : ` · agree with chart ${agree}/${ok.length}`) +
     (diff.length ? ` · differ: ${diff.join(' ')}` : '') + (errors.length ? ` · ERR ${errors.join('; ')}` : '') + ` · mode ${CFG.mode}`);
 }
 
@@ -408,7 +408,7 @@ ${changeHtml}
 ${gapHtml}
 </ul>
 ${board}
-<p style="color:#666;font-size:12px;margin-top:16px">SuperTrend 3/10 on closed 30m bars. Orange outline = flipped since last report. A time after a ticker = its last closed bar is older than 90 min (market closed or a lagging feed).${bad.length ? '<br><b style="color:#f23645">No data:</b> ' + esc(bad.map((r) => r.name + ' (' + r.error + ')').join(', ')) : ''}<br>Flip alerts email ${CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE + STRONG'} · Headless Flip Watcher · not trading advice.</p>
+<p style="color:#666;font-size:12px;margin-top:16px">SuperTrend 3/10 on closed 30m bars. Orange outline = flipped since last report. A time after a ticker = its last closed bar is older than 90 min (market closed or a lagging feed).${bad.length ? '<br><b style="color:#f23645">No data:</b> ' + esc(bad.map((r) => r.name + ' (' + r.error + ')').join(', ')) : ''}<br>Flip alerts email ${CFG.flipsEmailConfluence && CFG.minScore > 5 ? '⭐ confluence only' : CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE + STRONG'} · Headless Flip Watcher · not trading advice.</p>
 </div>`;
   const subject = `📊 Flip matrix ${et(Date.now(), { hour: 'numeric', minute: '2-digit' })} · ${buys} BUY / ${ok.length - buys} SELL` + (changes.length ? ` · ${changes.length} flip${changes.length > 1 ? 's' : ''}` : '') + (gaps.length ? ` · ${gaps.length} FVG${gaps.length > 1 ? 's' : ''}` : '');
   if (!send) { fs.writeFileSync(path.join(DIR, 'headless-matrix-preview.html'), html); console.log(subject + '\npreview -> headless-matrix-preview.html'); return; }
@@ -435,7 +435,7 @@ async function status() {
   }
   const ok = results.filter((r) => !r.error);
   const buys = ok.filter((r) => r.regime === 'BUY').length;
-  console.log(`\n${ok.length}/${results.length} symbols ok · ${buys} BUY / ${ok.length - buys} SELL · mode ${CFG.mode}, emails ${CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE + STRONG'}` +
+  console.log(`\n${ok.length}/${results.length} symbols ok · ${buys} BUY / ${ok.length - buys} SELL · mode ${CFG.mode}, emails ${CFG.flipsEmailConfluence && CFG.minScore > 5 ? '⭐ only' : CFG.flipsEmailConfluence ? `⭐ or score ≥ ${CFG.minScore}` : CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE + STRONG'}` +
     (paused ? ' · chart watcher paused (no comparison)' : ` · agree with chart ${agree}/${ok.length}`));
 }
 
