@@ -1,6 +1,7 @@
 {
  "mode": "live",
  "minScore": 2,
+ "concurrency": 8,
  "factor": 3.0,
  "atrLen": 10,
  "symbols": [
@@ -128,6 +129,294 @@
    "tv": "BATS:ORCL",
    "source": "yahoo",
    "ticker": "ORCL"
+  },
+  {
+   "tv": "US:NVDA",
+   "source": "yahoo",
+   "ticker": "NVDA",
+   "group": "requested"
+  },
+  {
+   "tv": "US:AMD",
+   "source": "yahoo",
+   "ticker": "AMD",
+   "group": "requested"
+  },
+  {
+   "tv": "US:COIN",
+   "source": "yahoo",
+   "ticker": "COIN",
+   "group": "requested"
+  },
+  {
+   "tv": "US:SPY",
+   "source": "yahoo",
+   "ticker": "SPY",
+   "group": "requested"
+  },
+  {
+   "tv": "US:QQQ",
+   "source": "yahoo",
+   "ticker": "QQQ",
+   "group": "requested"
+  },
+  {
+   "tv": "US:AAPL",
+   "source": "yahoo",
+   "ticker": "AAPL",
+   "group": "mega tech"
+  },
+  {
+   "tv": "US:MSFT",
+   "source": "yahoo",
+   "ticker": "MSFT",
+   "group": "mega tech"
+  },
+  {
+   "tv": "US:GOOGL",
+   "source": "yahoo",
+   "ticker": "GOOGL",
+   "group": "mega tech"
+  },
+  {
+   "tv": "US:AMZN",
+   "source": "yahoo",
+   "ticker": "AMZN",
+   "group": "mega tech"
+  },
+  {
+   "tv": "US:META",
+   "source": "yahoo",
+   "ticker": "META",
+   "group": "mega tech"
+  },
+  {
+   "tv": "US:AVGO",
+   "source": "yahoo",
+   "ticker": "AVGO",
+   "group": "mega tech"
+  },
+  {
+   "tv": "US:TSM",
+   "source": "yahoo",
+   "ticker": "TSM",
+   "group": "mega tech"
+  },
+  {
+   "tv": "US:ASML",
+   "source": "yahoo",
+   "ticker": "ASML",
+   "group": "semis"
+  },
+  {
+   "tv": "US:ARM",
+   "source": "yahoo",
+   "ticker": "ARM",
+   "group": "semis"
+  },
+  {
+   "tv": "US:QCOM",
+   "source": "yahoo",
+   "ticker": "QCOM",
+   "group": "semis"
+  },
+  {
+   "tv": "US:INTC",
+   "source": "yahoo",
+   "ticker": "INTC",
+   "group": "semis"
+  },
+  {
+   "tv": "US:AMAT",
+   "source": "yahoo",
+   "ticker": "AMAT",
+   "group": "semis"
+  },
+  {
+   "tv": "US:LRCX",
+   "source": "yahoo",
+   "ticker": "LRCX",
+   "group": "semis"
+  },
+  {
+   "tv": "US:MRVL",
+   "source": "yahoo",
+   "ticker": "MRVL",
+   "group": "semis"
+  },
+  {
+   "tv": "US:SMCI",
+   "source": "yahoo",
+   "ticker": "SMCI",
+   "group": "semis"
+  },
+  {
+   "tv": "US:CRM",
+   "source": "yahoo",
+   "ticker": "CRM",
+   "group": "software/security"
+  },
+  {
+   "tv": "US:ADBE",
+   "source": "yahoo",
+   "ticker": "ADBE",
+   "group": "software/security"
+  },
+  {
+   "tv": "US:NOW",
+   "source": "yahoo",
+   "ticker": "NOW",
+   "group": "software/security"
+  },
+  {
+   "tv": "US:CRWD",
+   "source": "yahoo",
+   "ticker": "CRWD",
+   "group": "software/security"
+  },
+  {
+   "tv": "US:PANW",
+   "source": "yahoo",
+   "ticker": "PANW",
+   "group": "software/security"
+  },
+  {
+   "tv": "US:SNOW",
+   "source": "yahoo",
+   "ticker": "SNOW",
+   "group": "software/security"
+  },
+  {
+   "tv": "US:APP",
+   "source": "yahoo",
+   "ticker": "APP",
+   "group": "software/security"
+  },
+  {
+   "tv": "US:SHOP",
+   "source": "yahoo",
+   "ticker": "SHOP",
+   "group": "software/security"
+  },
+  {
+   "tv": "US:NET",
+   "source": "yahoo",
+   "ticker": "NET",
+   "group": "software/security"
+  },
+  {
+   "tv": "US:DELL",
+   "source": "yahoo",
+   "ticker": "DELL",
+   "group": "hardware"
+  },
+  {
+   "tv": "US:ANET",
+   "source": "yahoo",
+   "ticker": "ANET",
+   "group": "hardware"
+  },
+  {
+   "tv": "US:SMH",
+   "source": "yahoo",
+   "ticker": "SMH",
+   "group": "sector ETFs"
+  },
+  {
+   "tv": "US:XLK",
+   "source": "yahoo",
+   "ticker": "XLK",
+   "group": "sector ETFs"
+  },
+  {
+   "tv": "US:XLF",
+   "source": "yahoo",
+   "ticker": "XLF",
+   "group": "sector ETFs"
+  },
+  {
+   "tv": "US:JPM",
+   "source": "yahoo",
+   "ticker": "JPM",
+   "group": "financials"
+  },
+  {
+   "tv": "US:GS",
+   "source": "yahoo",
+   "ticker": "GS",
+   "group": "financials"
+  },
+  {
+   "tv": "US:MS",
+   "source": "yahoo",
+   "ticker": "MS",
+   "group": "financials"
+  },
+  {
+   "tv": "US:BAC",
+   "source": "yahoo",
+   "ticker": "BAC",
+   "group": "financials"
+  },
+  {
+   "tv": "US:WFC",
+   "source": "yahoo",
+   "ticker": "WFC",
+   "group": "financials"
+  },
+  {
+   "tv": "US:C",
+   "source": "yahoo",
+   "ticker": "C",
+   "group": "financials"
+  },
+  {
+   "tv": "US:SCHW",
+   "source": "yahoo",
+   "ticker": "SCHW",
+   "group": "financials"
+  },
+  {
+   "tv": "US:BLK",
+   "source": "yahoo",
+   "ticker": "BLK",
+   "group": "financials"
+  },
+  {
+   "tv": "US:V",
+   "source": "yahoo",
+   "ticker": "V",
+   "group": "financials"
+  },
+  {
+   "tv": "US:MA",
+   "source": "yahoo",
+   "ticker": "MA",
+   "group": "financials"
+  },
+  {
+   "tv": "US:AXP",
+   "source": "yahoo",
+   "ticker": "AXP",
+   "group": "financials"
+  },
+  {
+   "tv": "US:PYPL",
+   "source": "yahoo",
+   "ticker": "PYPL",
+   "group": "financials"
+  },
+  {
+   "tv": "US:SOFI",
+   "source": "yahoo",
+   "ticker": "SOFI",
+   "group": "financials"
+  },
+  {
+   "tv": "US:BRK-B",
+   "source": "yahoo",
+   "ticker": "BRK-B",
+   "group": "financials"
   }
  ]
 }
