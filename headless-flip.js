@@ -165,6 +165,28 @@ function scoreSetup(flip, runFlips, regimes) {
   return { score, label: score >= 4 ? 'STRONG' : score >= 2 ? 'MODERATE' : 'WEAK', factors };
 }
 
+// ---------- fair value gaps (added 2026-09-28) ----------
+// Confirmed = the 3-candle gap is complete on a CLOSED bar i: bullish when low[i] > high[i-2],
+// bearish when high[i] < low[i-2], and the gap is at least fvg.minAtr x ATR(14) (Flux Lab default 0.2).
+
+function atrSeries(bars, n = 14) {
+  const out = []; let a = null;
+  bars.forEach((b, i) => {
+    const pc = i ? bars[i - 1].c : b.c;
+    const tr = Math.max(b.h - b.l, Math.abs(b.h - pc), Math.abs(b.l - pc));
+    a = a == null ? tr : (a * (n - 1) + tr) / n; out.push(a);
+  });
+  return out;
+}
+
+function fvgAt(bars, i, atr, minAtr) {
+  if (i < 2) return null;
+  const a = bars[i - 2], b = bars[i];
+  if (b.l > a.h && b.l - a.h >= minAtr * atr[i]) return { side: 'BULL', top: b.l, bottom: a.h, size: (b.l - a.h) / atr[i] };
+  if (b.h < a.l && a.l - b.h >= minAtr * atr[i]) return { side: 'BEAR', top: a.l, bottom: b.h, size: (a.l - b.h) / atr[i] };
+  return null;
+}
+
 // ---------- core ----------
 
 async function evaluate(sym) {
@@ -174,7 +196,8 @@ async function evaluate(sym) {
   if (confirmed.length < CFG.atrLen + 5) throw new Error(`only ${confirmed.length} confirmed bars`);
   const regs = supertrendRegimes(confirmed, CFG.factor, CFG.atrLen);
   const n = confirmed.length;
-  return { tv: sym.tv, name: sym.tv.split(':')[1], regime: regs[n - 1], prev: regs[n - 2], barTime: confirmed[n - 1].t, ageMin: Math.round((now - confirmed[n - 1].t - TF_MS) / 60000) };
+  const fvg = fvgAt(confirmed, n - 1, atrSeries(confirmed), (CFG.fvg && CFG.fvg.minAtr) || 0.2);
+  return { tv: sym.tv, name: sym.tv.split(':')[1], regime: regs[n - 1], prev: regs[n - 2], fvg, price: confirmed[n - 1].c, barTime: confirmed[n - 1].t, ageMin: Math.round((now - confirmed[n - 1].t - TF_MS) / 60000) };
 }
 
 // Run fn over items with at most `limit` in flight (keeps exchanges from throttling).
@@ -203,12 +226,13 @@ function chartRegimes() {
 async function run() {
   const state = readJSON(STATE_FILE, { regimes: {}, bars: {} });
   const results = await evaluateAll();
-  const flips = [], errors = [];
+  const flips = [], fvgs = [], errors = [];
   for (const r of results) {
     if (r.error) { errors.push(`${r.name}: ${r.error}`); continue; }
     const known = state.regimes[r.tv];
     if (state.bars[r.tv] === r.barTime) continue;           // bar already processed
     if (known && known !== r.regime) flips.push(r);
+    if (r.fvg && state.bars[r.tv]) fvgs.push(r);            // skip a symbol's very first bar (no baseline yet)
     state.regimes[r.tv] = r.regime;
     state.bars[r.tv] = r.barTime;
   }
@@ -231,6 +255,8 @@ async function run() {
   const toSend = flips.filter((f) => f.setup.score >= minScore);
   const held = flips.filter((f) => f.setup.score < minScore);
   if (toSend.length && CFG.mode === 'live') await sendEmail(toSend);
+  for (const f of fvgs) fs.appendFileSync(path.join(DIR, 'fvg-alerts.tsv'), `${new Date().toISOString()}\t${f.name}\t${f.fvg.side}\t${f.fvg.bottom}\t${f.fvg.top}\t${f.fvg.size.toFixed(2)}\tbar ${new Date(f.barTime).toISOString()}\n`);
+  if (fvgs.length && CFG.fvg && CFG.fvg.email && CFG.mode === 'live') sendFvgEmail(fvgs);
   log(`${flips.length ? 'FLIPS ' + flips.map((f) => `${f.name}→${f.regime} [${f.setup.label}:${f.setup.score}]`).join(' ') + (held.length ? ` · held back ${held.length} WEAK` : '') : 'no flips'} · ${ok.length}/${results.length} ok ` + (chartPaused ? '' : ` · agree with chart ${agree}/${ok.length}`) +
     (diff.length ? ` · differ: ${diff.join(' ')}` : '') + (errors.length ? ` · ERR ${errors.join('; ')}` : '') + ` · mode ${CFG.mode}`);
 }
@@ -240,6 +266,17 @@ function mail(subject, body, html = false) {
   const env = { ...process.env, SEND_EMAIL_HTML: html ? '1' : '0' };
   if (!env.FLIP_GMAIL_APP_PASSWORD) env.FLIP_GMAIL_APP_PASSWORD = execFileSync('security', ['find-generic-password', '-a', 'darup67@gmail.com', '-s', 'flip-notifier-gmail', '-w']).toString().trim();
   execFileSync(process.execPath, [path.join(DIR, 'send-email.js'), subject, body], { env, timeout: 35000, stdio: 'ignore' });
+}
+
+function sendFvgEmail(fvgs) {
+  const fmt = (x) => (x >= 1000 ? x.toLocaleString('en-US', { maximumFractionDigits: 0 }) : x.toPrecision(4));
+  const closed = new Date(fvgs[0].barTime + TF_MS).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+  const bull = fvgs.filter((f) => f.fvg.side === 'BULL'), bear = fvgs.filter((f) => f.fvg.side === 'BEAR');
+  const subject = `🟩🟥 FVG ${closed}: ` + [bull.length ? `${bull.length} bull (${bull.map((f) => f.name).join(', ')})` : '', bear.length ? `${bear.length} bear (${bear.map((f) => f.name).join(', ')})` : ''].filter(Boolean).join(' · ');
+  const line = (f) => `${f.fvg.side === 'BULL' ? '🟩' : '🟥'} ${f.name}  gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}  (${f.fvg.size.toFixed(2)}× ATR)  last ${fmt(f.price)}  · trend ${f.regime}`;
+  const body = `Fair value gaps confirmed on the 30m bar that closed ${closed} ET.\n\n` + [...bull, ...bear].map(line).join('\n') +
+    `\n\nConfirmed = 3-candle gap complete on a closed bar, at least ${(CFG.fvg.minAtr || 0.2)}× ATR(14). Price often returns to fill a gap; not a signal on its own. Not advice.\n— Headless Flip Watcher`;
+  mail(subject, body);
 }
 
 async function sendEmail(flips) {
@@ -334,6 +371,21 @@ async function status() {
     (paused ? ' · chart watcher paused (no comparison)' : ` · agree with chart ${agree}/${ok.length}`));
 }
 
+async function fvgReplay(hours) {
+  const since = Date.now() - hours * 3600e3, perBar = {};
+  await pool(CFG.symbols, CFG.concurrency || 8, async (sym) => {
+    try {
+      const bars = (await SOURCES[sym.source](sym.ticker)).filter((b) => b.t + TF_MS <= Date.now()), atr = atrSeries(bars);
+      for (let i = 2; i < bars.length; i++) if (bars[i].t + TF_MS >= since) {
+        const f = fvgAt(bars, i, atr, (CFG.fvg && CFG.fvg.minAtr) || 0.2);
+        if (f) (perBar[bars[i].t] = perBar[bars[i].t] || []).push(sym.tv.split(':')[1] + ' ' + f.side);
+      }
+    } catch (e) { console.log(sym.tv, e.message); }
+  });
+  const counts = Object.values(perBar).map((a) => a.length), total = counts.reduce((a, b) => a + b, 0);
+  console.log(`last ${hours}h: ${total} FVGs on ${counts.length} bars (= emails), ~${(counts.length / (hours / 24)).toFixed(0)} emails/day, max ${Math.max(...counts)} tickers in one bar`);
+}
+
 async function replay(hours) {
   // Recompute historical flips from bar history, write them to a temp tsv, compare.
   const since = Date.now() - hours * 3600e3, lines = [];
@@ -383,5 +435,5 @@ function compare(hours, headFile = ALERTS) {
 }
 
 const arg = process.argv[2];
-(arg === '--matrix' ? matrix(true) : arg === '--matrix-preview' ? matrix(false) : arg === '--status' ? status() : arg === '--replay' ? replay(+process.argv[3] || 72) : arg === '--compare' ? Promise.resolve(compare(+process.argv[3] || 48)) : run())
+(arg === '--fvg-replay' ? fvgReplay(+process.argv[3] || 72) : arg === '--matrix' ? matrix(true) : arg === '--matrix-preview' ? matrix(false) : arg === '--status' ? status() : arg === '--replay' ? replay(+process.argv[3] || 72) : arg === '--compare' ? Promise.resolve(compare(+process.argv[3] || 48)) : run())
   .catch((e) => { log('FATAL ' + (e.stack || e.message)); process.exit(1); });
