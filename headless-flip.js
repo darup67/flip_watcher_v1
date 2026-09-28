@@ -21,7 +21,9 @@ const CFG = JSON.parse(fs.readFileSync(path.join(DIR, 'headless-config.json'), '
 const STATE_FILE = path.join(DIR, 'headless-state.json');
 const ALERTS = path.join(DIR, 'headless-alerts.tsv');
 const LOG = path.join(DIR, 'headless-flip.log');
-const TF_MS = 30 * 60 * 1000;
+// Bar size for the whole universe (CFG.tfMinutes; 15 since 2026-09-28, was 30). Every source follows it.
+const TF_MIN = CFG.tfMinutes || 30;
+const TF_MS = TF_MIN * 60 * 1000;
 
 const log = (msg) => {
   const line = `${new Date().toISOString()}  ${msg}`;
@@ -49,7 +51,7 @@ async function yahoo(ticker) {
   // Pre-market + after-hours bars for stocks (CFG.extendedHours, added 2026-09-28) so the 8:00 AM matrix
   // and pre-market flips/gaps are live. Futures (=F) trade nearly 24h and ignore the flag.
   const ext = CFG.extendedHours && !ticker.endsWith('=F') ? '&includePrePost=true' : '';
-  const j = await getJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=30m&range=30d${ext}`);
+  const j = await getJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=${TF_MIN}m&range=30d${ext}`);
   const res = j.chart.result[0];
   const q = res.indicators.quote[0];
   return (res.timestamp || []).map((t, i) => ({ t: t * 1000, o: q.open[i], h: q.high[i], l: q.low[i], c: q.close[i], v: q.volume ? q.volume[i] || 0 : 0 }))
@@ -60,39 +62,39 @@ async function yahoo(ticker) {
 }
 
 async function coinbase(product) {
-  // Coinbase has no 30m granularity: fetch 15m (2 pages, 600 bars) and pair them.
-  const now = Date.now();
-  const rows = [];
-  for (let page = 0; page < 2; page++) {
+  // Native 15m candles (granularity 900), 300 per page; 4 pages ≈ 12.5 days. For TF_MIN = 30 the
+  // 15m bars are paired into 30m, as before.
+  const now = Date.now(), rows = [];
+  for (let page = 0; page < 4; page++) {
     const end = new Date(now - page * 300 * 900e3).toISOString();
     const start = new Date(now - (page + 1) * 300 * 900e3).toISOString();
     rows.push(...await getJSON(`https://api.exchange.coinbase.com/products/${product}/candles?granularity=900&start=${start}&end=${end}`));
   }
-  const byBar = new Map();
+  const need = TF_MS / 900e3, byBar = new Map();
   for (const [ts, low, high, open, close, volume] of rows) {
     const t = ts * 1000, k = Math.floor(t / TF_MS) * TF_MS;
     const parts = byBar.get(k) || [];
-    parts.push({ t, o: open, h: high, l: low, c: close, v: volume || 0 });
+    if (!parts.some((x) => x.t === t)) parts.push({ t, o: open, h: high, l: low, c: close, v: volume || 0 });
     byBar.set(k, parts);
   }
   return [...byBar.entries()].sort((a, b) => a[0] - b[0]).map(([k, p]) => {
     p.sort((a, b) => a.t - b.t);
     return { t: k, o: p[0].o, h: Math.max(...p.map((x) => x.h)), l: Math.min(...p.map((x) => x.l)), c: p[p.length - 1].c, v: p.reduce((a, x) => a + x.v, 0), parts: p.length };
-  }).filter((b, i, all) => b.parts === 2 || i === all.length - 1);
+  }).filter((b, i, all) => b.parts === need || i === all.length - 1);
 }
 
 async function bitstamp(pair) {
-  const j = await getJSON(`https://www.bitstamp.net/api/v2/ohlc/${pair}/?step=1800&limit=1000`);
+  const j = await getJSON(`https://www.bitstamp.net/api/v2/ohlc/${pair}/?step=${TF_MIN * 60}&limit=1000`);
   return j.data.ohlc.map((b) => ({ t: +b.timestamp * 1000, o: +b.open, h: +b.high, l: +b.low, c: +b.close, v: +b.volume }));
 }
 
 async function binance(sym) {
-  const j = await getJSON(`https://data-api.binance.vision/api/v3/klines?symbol=${sym}&interval=30m&limit=1000`);
+  const j = await getJSON(`https://data-api.binance.vision/api/v3/klines?symbol=${sym}&interval=${TF_MIN}m&limit=1000`);
   return j.map((k) => ({ t: k[0], o: +k[1], h: +k[2], l: +k[3], c: +k[4], v: +k[5] }));
 }
 
 async function kraken(pair) {
-  const j = await getJSON(`https://api.kraken.com/0/public/OHLC?pair=${pair}&interval=30`);
+  const j = await getJSON(`https://api.kraken.com/0/public/OHLC?pair=${pair}&interval=${TF_MIN}`);
   const key = Object.keys(j.result).find((k) => k !== 'last');
   return j.result[key].map((b) => ({ t: b[0] * 1000, o: +b[1], h: +b[2], l: +b[3], c: +b[4], v: +b[6] }));
 }
@@ -324,7 +326,7 @@ function sendFvgEmail(fvgs) {
   const line = (f) => f.rally
     ? `🚀 ${f.name}  EARLY RALLY · bull gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)} on ${f.volx.toFixed(1)}× volume · entry ~${fmt(f.price)}, stop ${fmt(f.price - f.atr)} (−1 ATR), target ${fmt(f.price + 2 * f.atr)} (+2 ATR) · trend ${f.regime}${f.star ? ' ⭐' : ''}`
     : `${f.star ? '⭐' : '  '}${f.fvg.side === 'BULL' ? '🟩' : '🟥'} ${f.name}  gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}  (${f.fvg.size.toFixed(2)}× ATR)  last ${fmt(f.price)}  · trend ${f.regime}`;
-  const body = `Signals confirmed on the 30m bar that closed ${closed} ET.\n🚀 = early rally (stocks/ETFs/crypto): bull gap on ≥ ${rallyVol()}× average volume. Futures: bullish and bearish gaps (shortable).\n\n` + [...rallies, ...fut].map(line).join('\n') +
+  const body = `Signals confirmed on the ${TF_MIN}m bar that closed ${closed} ET.\n🚀 = early rally (stocks/ETFs/crypto): bull gap on ≥ ${rallyVol()}× average volume. Futures: bullish and bearish gaps (shortable).\n\n` + [...rallies, ...fut].map(line).join('\n') +
     (rallies.length ? `\n\nEarly-rally history: +2 ATR before −1 ATR hit 30% (older) / 41% (recent) of the time vs 27% / 31% for a random bar; break-even for 2:1 is 33%. Edge is modest and market-dependent.` : '') +
     `\n\n⭐ = gap in the direction of the ticker's trend. ${statLine('gaps', '⭐ with trend')}\n${statLine('gaps', 'against trend')}` +
     `\n\nConfirmed = 3-candle gap complete on a closed bar, at least ${(CFG.fvg.minAtr || 0.2)}× ATR(14). Price often returns to fill a gap; not a signal on its own. Not advice.\n— Headless Flip Watcher`;
@@ -336,7 +338,7 @@ async function sendEmail(flips) {
   const subject = `${best} ${flips.map((f) => `${f.regime === 'BUY' ? '⬆️' : '⬇️'} ${f.name} → ${f.regime}`).join(' · ')}`;
   const body = flips.map((f) => `${f.star ? '⭐ ' : ''}${f.regime === 'BUY' ? '⬆️' : '⬇️'} ${f.name} → ${f.regime}  ${SCORE_EMOJI[f.setup.label]} ${f.setup.label} (${f.setup.score}/5)\n` +
     (f.star ? '  · ⭐ confluence: same-direction FVG on this ticker in the last 2h\n' : '') +
-    f.setup.factors.map((x) => `  · ${x}`).join('\n') + `\n  · 30m bar closed ${new Date(f.barTime + TF_MS).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' })} ET`).join('\n\n') +
+    f.setup.factors.map((x) => `  · ${x}`).join('\n') + `\n  · ${TF_MIN}m bar closed ${new Date(f.barTime + TF_MS).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' })} ET`).join('\n\n') +
     `\n\n${statLine('flips', flips[0].setup.label)}${flips.some((f) => f.star) ? '\n' + statLine('flips', '⭐ confluence') : ''}` +
     '\n\n— Headless Flip Watcher (exchange data, no TradingView)';
   mail(subject, body);
@@ -425,12 +427,12 @@ ${rows.join('\n')}
 ${changeHtml}
 </ul>
 <h3 style="margin:18px 0 4px">🚀 Early rallies & futures FVGs since last report (${gaps.length})</h3>
-<div style="color:#666;font-size:12px;margin-bottom:4px">🚀 = stocks/ETFs/crypto bull gap on ≥ ${(CFG.fvg && CFG.fvg.rallyVolX) || 2.5}× average volume (early rally). Futures: bullish and bearish gaps. Gaps ≥ ${(CFG.fvg && CFG.fvg.minAtr) || 0.2}× ATR on closed 30m bars.</div>
+<div style="color:#666;font-size:12px;margin-bottom:4px">🚀 = stocks/ETFs/crypto bull gap on ≥ ${(CFG.fvg && CFG.fvg.rallyVolX) || 2.5}× average volume (early rally). Futures: bullish and bearish gaps. Gaps ≥ ${(CFG.fvg && CFG.fvg.minAtr) || 0.2}× ATR on closed ${TF_MIN}m bars.</div>
 <ul style="margin:0;padding-left:18px">
 ${gapHtml}
 </ul>
 ${board}
-<p style="color:#666;font-size:12px;margin-top:16px">SuperTrend 3/10 on closed 30m bars. Orange outline = flipped since last report. A time after a ticker = its last closed bar is older than 90 min (market closed or a lagging feed).${bad.length ? '<br><b style="color:#f23645">No data:</b> ' + esc(bad.map((r) => r.name + ' (' + r.error + ')').join(', ')) : ''}<br>Flip alerts email ${CFG.flipsEmailConfluence && CFG.minScore > 5 ? '⭐ confluence only' : CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE + STRONG'} · Headless Flip Watcher · not trading advice.</p>
+<p style="color:#666;font-size:12px;margin-top:16px">SuperTrend 3/10 on closed ${TF_MIN}m bars. Orange outline = flipped since last report. A time after a ticker = its last closed bar is older than 90 min (market closed or a lagging feed).${bad.length ? '<br><b style="color:#f23645">No data:</b> ' + esc(bad.map((r) => r.name + ' (' + r.error + ')').join(', ')) : ''}<br>Flip alerts email ${CFG.flipsEmailConfluence && CFG.minScore > 5 ? '⭐ confluence only' : CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE + STRONG'} · Headless Flip Watcher · not trading advice.</p>
 </div>`;
   const subject = `📊 Flip matrix ${et(Date.now(), { hour: 'numeric', minute: '2-digit' })} · ${buys} BUY / ${ok.length - buys} SELL` + (changes.length ? ` · ${changes.length} flip${changes.length > 1 ? 's' : ''}` : '') + (gaps.length ? ` · ${gaps.length} FVG${gaps.length > 1 ? 's' : ''}` : '');
   if (!send) { fs.writeFileSync(path.join(DIR, 'headless-matrix-preview.html'), html); console.log(subject + '\npreview -> headless-matrix-preview.html'); return; }
