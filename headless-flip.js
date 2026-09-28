@@ -334,6 +334,18 @@ async function matrix(send) {
   const changeHtml = changes.length
     ? changes.map((c) => `<li>${esc(et(c.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · <b>${esc(c.name)}</b> → <span style="color:${c.to === 'BUY' ? '#089981' : '#f23645'};font-weight:600">${c.to}</span> <span style="color:#888">${esc(c.score)}</span></li>`).join('\n')
     : '<li style="color:#888">none</li>';
+  // FVGs since the last report, same tradable rule as the FVG emails: bull for all, bear for futures only.
+  const futNames = new Set(CFG.symbols.filter((x) => x.group === 'futures').map((x) => x.tv.split(':')[1]));
+  const fvgFile = path.join(DIR, 'fvg-alerts.tsv');
+  const gaps = fs.existsSync(fvgFile) ? fs.readFileSync(fvgFile, 'utf8').trim().split('\n').flatMap((line) => {
+    const [ts, name, side, bottom, top, size] = line.split('\t');
+    return Date.parse(ts) > since && (side === 'BULL' || futNames.has(name))
+      ? [{ t: Date.parse(ts), name, side, bottom: +bottom, top: +top, size: +size }] : [];
+  }) : [];
+  const px = (x) => (x >= 1000 ? x.toLocaleString('en-US', { maximumFractionDigits: 0 }) : x.toPrecision(4));
+  const gapHtml = gaps.length
+    ? gaps.map((g) => `<li>${esc(et(g.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · ${g.side === 'BULL' ? '🟩' : '🟥'} <b>${esc(g.name)}</b> ${px(g.bottom)} – ${px(g.top)} <span style="color:#888">${g.size.toFixed(2)}× ATR</span></li>`).join('\n')
+    : '<li style="color:#888">none</li>';
   const html = `<div style="font:14px -apple-system,Helvetica,Arial;color:#222;max-width:760px">
 <h2 style="margin:0 0 4px">Flip matrix · ${esc(when)} ET</h2>
 <div style="font-size:15px;margin-bottom:12px"><b style="color:#089981">${buys} BUY</b> / <b style="color:#f23645">${ok.length - buys} SELL</b> of ${ok.length} · ${Math.round(100 * (ok.length - buys) / (ok.length || 1))}% SELL${last.buys != null ? ` · last report ${last.buys} BUY / ${last.sells} SELL` : ''}</div>
@@ -344,9 +356,14 @@ ${rows.join('\n')}
 <ul style="margin:0;padding-left:18px">
 ${changeHtml}
 </ul>
+<h3 style="margin:18px 0 4px">FVGs since last report (${gaps.length})</h3>
+<div style="color:#666;font-size:12px;margin-bottom:4px">Bullish gaps for everything, bearish gaps for futures only (shortable); ≥ ${(CFG.fvg && CFG.fvg.minAtr) || 0.2}× ATR on closed 30m bars.</div>
+<ul style="margin:0;padding-left:18px">
+${gapHtml}
+</ul>
 <p style="color:#666;font-size:12px;margin-top:16px">SuperTrend 3/10 on closed 30m bars. Orange outline = flipped since last report. A time after a ticker = its last closed bar is older than 90 min (market closed or a lagging feed).${bad.length ? '<br><b style="color:#f23645">No data:</b> ' + esc(bad.map((r) => r.name + ' (' + r.error + ')').join(', ')) : ''}<br>Flip alerts email ${CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE + STRONG'} · Headless Flip Watcher · not trading advice.</p>
 </div>`;
-  const subject = `📊 Flip matrix ${et(Date.now(), { hour: 'numeric', minute: '2-digit' })} · ${buys} BUY / ${ok.length - buys} SELL` + (changes.length ? ` · ${changes.length} flip${changes.length > 1 ? 's' : ''}` : '');
+  const subject = `📊 Flip matrix ${et(Date.now(), { hour: 'numeric', minute: '2-digit' })} · ${buys} BUY / ${ok.length - buys} SELL` + (changes.length ? ` · ${changes.length} flip${changes.length > 1 ? 's' : ''}` : '') + (gaps.length ? ` · ${gaps.length} FVG${gaps.length > 1 ? 's' : ''}` : '');
   if (!send) { fs.writeFileSync(path.join(DIR, 'headless-matrix-preview.html'), html); console.log(subject + '\npreview -> headless-matrix-preview.html'); return; }
   mail(subject, html, true);
   fs.writeFileSync(MATRIX_FILE, JSON.stringify({ sentAt: new Date().toISOString(), buys, sells: ok.length - buys }, null, 1));
