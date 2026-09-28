@@ -26,6 +26,23 @@ const LOG = path.join(DIR, 'headless-flip.log');
 // The base is always 15m; flips run on signals.flipTf (15), and 30m/1h are merged locally by agg().
 const core = require(path.join(require('os').homedir(), 'trade-core', 'bars.js'));
 const TF_MIN = 15;
+const ledger = require(path.join(require('os').homedir(), 'trade-core', 'ledger.js'));
+const assetOf = (tv) => { const g = (CFG.symbols.find((x) => x.tv === tv) || {}).group; return g === 'futures' ? 'future' : g === 'crypto' ? 'crypto' : 'stock'; };
+
+// Order tickets (#7): a ready-to-review plan for each real-time alert. Nothing is ever placed from here;
+// placing happens only when the user asks Claude ("place ticket T4K2A") and confirms a broker preview.
+function makeTicket(lid, { name, tv, side, price, stop, target }) {
+  const risk = (CFG.tickets && CFG.tickets.riskUsd) || 100, asset = assetOf(tv), per = Math.abs(price - stop);
+  let h = 0; for (const ch of lid) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const t = { id: 'T' + h.toString(36).toUpperCase().slice(0, 5), sym: name, side: side === 'short' ? 'SELL' : 'BUY', entry: +price.toPrecision(6),
+              stop: +stop.toPrecision(6), target: +target.toPrecision(6), riskUsd: risk,
+              account: asset === 'stock' ? 'Robinhood ••4526' : asset === 'crypto' ? 'Robinhood crypto (or Coinbase app)' : 'futures account' };
+  if (asset === 'stock') t.qty = Math.max(1, Math.floor(risk / per));
+  else if (asset === 'crypto') t.notionalUsd = Math.round((risk / per) * price);
+  else t.qty = 1;
+  return t;
+}
+const ticketLine = (t) => `  🎫 ${t.id}: ${t.side} ${t.qty ? t.qty + (t.account.startsWith('futures') ? ' contract' : ' sh') : '$' + t.notionalUsd} ${t.sym} limit ~${t.entry}, stop ${t.stop}, target ${t.target} (risk ≈ $${t.riskUsd}) · ${t.account} · say "place ticket ${t.id}" to review`;
 const TF_MS = TF_MIN * 60 * 1000;
 
 const log = (msg) => {
@@ -306,8 +323,20 @@ async function run() {
     const arrow = f.regime === 'BUY' ? '⬆️' : '⬇️';
     fs.appendFileSync(ALERTS, `${new Date().toISOString()}\t${arrow} ${f.name} → ${f.regime}\t${f.name} ${f.regime === 'BUY' ? 'SELL' : 'BUY'} → ${f.regime}\tbar ${new Date(f.barTime).toISOString()}\t${f.setup.label}:${f.setup.score}\n`);
   }
-  const minScore = CFG.minScore ?? 2;
-  const toSend = flips.filter((f) => f.setup.score >= minScore || (CFG.flipsEmailConfluence && f.star));
+  // Ledger (#1): every flip is recorded; real-time email only when its kind is PROVEN (#13).
+  for (const f of flips) {
+    f.asset = assetOf(f.tv); f.side = f.regime === 'BUY' ? 'long' : 'short';
+    f.lid = ledger.add({ product: 'headless', kind: `flip:${f.setup.label}`, sym: f.tv, asset: f.asset, tf: 15, side: f.side,
+                         t: f.barTime + TF_MS, price: f.price, atr: f.atr, meta: { score: f.setup.score } });
+    f.evidence = ledger.isProven('headless', `flip:${f.setup.label}`, ledger.regimeAt(f.asset, f.barTime + TF_MS));
+  }
+  const minScore = CFG.minScore ?? 2, gate = CFG.gateByEvidence !== false;
+  const toSend = flips.filter((f) => (f.setup.score >= minScore || (CFG.flipsEmailConfluence && f.star)) && (!gate || f.evidence.proven));
+  for (const f of toSend) {
+    const d = f.side === 'short' ? -1 : 1;
+    f.ticket = makeTicket(f.lid, { name: f.name, tv: f.tv, side: f.side, price: f.price, stop: f.price - d * f.atr, target: f.price + 2 * d * f.atr });
+    ledger.markEmailed(f.lid, f.ticket);
+  }
   const held = flips.filter((f) => !toSend.includes(f));
   if (toSend.length && CFG.mode === 'live') await sendEmail(toSend);
   // What you can trade (user, 2026-09-28): futures can be shorted, so both sides; everything else is
@@ -323,7 +352,18 @@ async function run() {
     (f.fvg.side === 'BULL' && CFG.fvg && CFG.fvg.nonFuturesMode === 'all'))));
   for (const f of fvgs.filter((x) => x.kind === 'gap' || x.rally)) fs.appendFileSync(path.join(DIR, 'fvg-alerts.tsv'), `${new Date().toISOString()}\t${f.name}\t${f.fvg.side}\t${f.fvg.bottom}\t${f.fvg.top}\t${f.fvg.size.toFixed(2)}\tbar ${new Date(f.barTime).toISOString()}\t${(f.fvg.side === 'BULL') === (f.regime === 'BUY') ? 'star' : ''}\t${f.volx.toFixed(2)}\t${f.rally ? 'rally' : ''}\t${f.tf}m\n`);
   for (const f of tradable) f.star = (f.fvg.side === 'BULL') === (f.regime === 'BUY');   // ⭐ gap with the trend
-  const toMail = CFG.fvg && CFG.fvg.onlyConfluence ? tradable.filter((f) => f.star) : tradable;
+  // Ledger: every rally and every 1h gap is recorded (non-futures bull gaps too, as 'gap:bull').
+  for (const f of fvgs.filter((x) => x.kind === 'gap' || x.rally)) {
+    f.asset = assetOf(f.tv); const d = f.fvg.side === 'BULL' ? 1 : -1;
+    f.side = d > 0 ? 'long' : 'short'; f.stop = f.price - d * f.atr; f.target = f.price + 2 * d * f.atr;
+    f.lkind = f.rally ? 'rally' : f.asset === 'future' ? 'gap:futures' : 'gap:bull';
+    f.lid = ledger.add({ product: 'headless', kind: f.lkind, sym: f.tv, asset: f.asset, tf: f.tf, side: f.side, t: f.barTime + f.tf * 60000,
+                         price: f.price, stop: f.stop, target: f.target, atr: f.atr, meta: { volx: f.volx, size: f.fvg.size } });
+    f.evidence = ledger.isProven('headless', f.lkind, ledger.regimeAt(f.asset, f.barTime + f.tf * 60000));
+  }
+  let toMail = CFG.fvg && CFG.fvg.onlyConfluence ? tradable.filter((f) => f.star) : tradable;
+  if (CFG.gateByEvidence !== false) toMail = toMail.filter((f) => f.evidence && f.evidence.proven);
+  for (const f of toMail) { f.ticket = makeTicket(f.lid, f); ledger.markEmailed(f.lid, f.ticket); }
   if (toMail.length && CFG.fvg && CFG.fvg.email && CFG.mode === 'live') sendFvgEmail(toMail);
   log(`${flips.length ? 'FLIPS ' + flips.map((f) => `${f.name}→${f.regime} [${f.setup.label}:${f.setup.score}]`).join(' ') + (held.length ? ` · held back ${held.length} (not emailed)` : '') : 'no flips'} · ${ok.length}/${results.length} ok ` + (chartPaused ? '' : ` · agree with chart ${agree}/${ok.length}`) +
     (diff.length ? ` · differ: ${diff.join(' ')}` : '') + (errors.length ? ` · ERR ${errors.join('; ')}` : '') + ` · mode ${CFG.mode}`);
@@ -366,9 +406,10 @@ function sendFvgEmail(fvgs) {
   const subject = rallies.length
     ? `🚀 Early rally ${closed}: ${rallies.map((f) => f.name).join(', ')}${futTxt ? ' · ' + futTxt : ''}`
     : `🟩🟥 FVG ${closed}${stars ? ` ⭐${stars}` : ''}: ${futTxt}`;
-  const line = (f) => f.rally
+  const line = (f) => (f.rally
     ? `🚀 ${f.name}  EARLY RALLY (${f.tf}m) · bull gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)} on ${f.volx.toFixed(1)}× volume · entry ~${fmt(f.price)}, stop ${fmt(f.price - f.atr)} (−1 ATR), target ${fmt(f.price + 2 * f.atr)} (+2 ATR) · trend ${f.regime}${f.star ? ' ⭐' : ''}`
-    : `${f.star ? '⭐' : '  '}${f.fvg.side === 'BULL' ? '🟩' : '🟥'} ${f.name} (${f.tf === 60 ? '1h' : f.tf + 'm'})  gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}  (${f.fvg.size.toFixed(2)}× ATR)  last ${fmt(f.price)}  · trend ${f.regime}`;
+    : `${f.star ? '⭐' : '  '}${f.fvg.side === 'BULL' ? '🟩' : '🟥'} ${f.name} (${f.tf === 60 ? '1h' : f.tf + 'm'})  gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}  (${f.fvg.size.toFixed(2)}× ATR)  last ${fmt(f.price)}  · trend ${f.regime}`)
+    + (f.ticket ? '\n' + ticketLine(f.ticket) : '') + (f.evidence ? `\n    evidence: ${Math.round(100 * f.evidence.win)}% net win vs ${Math.round(100 * (f.evidence.baseline || 0))}% random (n=${f.evidence.n})` : '');
   const body = `Signals confirmed on bars closing by ${closed} ET.\n🚀 = early rally (stocks/ETFs/crypto, ${SIG.rally}m bars): bull gap on ≥ ${rallyVol()}× average volume. Futures: bullish and bearish gaps on ${SIG.gap === 60 ? '1h' : SIG.gap + 'm'} bars (shortable).\n\n` + [...rallies, ...fut].map(line).join('\n') +
     (rallies.length ? `\n\nEarly-rally history: +2 ATR before −1 ATR hit 30% (older) / 41% (recent) of the time vs 27% / 31% for a random bar; break-even for 2:1 is 33%. Edge is modest and market-dependent.` : '') +
     `\n\n⭐ = gap in the direction of the ticker's trend. ${statLine('gaps', '⭐ with trend')}\n${statLine('gaps', 'against trend')}` +
@@ -380,6 +421,7 @@ async function sendEmail(flips) {
   const best = flips.some((f) => f.setup.label === 'STRONG') ? '🔥' : '⚡';
   const subject = `${best} ${flips.map((f) => `${f.regime === 'BUY' ? '⬆️' : '⬇️'} ${f.name} → ${f.regime}`).join(' · ')}`;
   const body = flips.map((f) => `${f.star ? '⭐ ' : ''}${f.regime === 'BUY' ? '⬆️' : '⬇️'} ${f.name} → ${f.regime}  ${SCORE_EMOJI[f.setup.label]} ${f.setup.label} (${f.setup.score}/5)\n` +
+    (f.ticket ? ticketLine(f.ticket) + '\n' : '') + (f.evidence ? `  · evidence: ${Math.round(100 * f.evidence.win)}% net win vs ${Math.round(100 * (f.evidence.baseline || 0))}% random (n=${f.evidence.n}, ${f.evidence.scope})\n` : '') +
     (f.star ? '  · ⭐ confluence: same-direction FVG on this ticker in the last 2h\n' : '') +
     f.setup.factors.map((x) => `  · ${x}`).join('\n') + `\n  · ${TF_MIN}m bar closed ${new Date(f.barTime + TF_MS).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' })} ET`).join('\n\n') +
     `\n\n${statLine('flips', flips[0].setup.label)}${flips.some((f) => f.star) ? '\n' + statLine('flips', '⭐ confluence') : ''}` +
@@ -442,6 +484,25 @@ async function matrix(send) {
   const gapHtml = gaps.length
     ? gaps.map((g) => `<li>${esc(et(g.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · ${g.rally ? '🚀' : ''}${g.star ? '⭐' : ''}${g.side === 'BULL' ? '🟩' : '🟥'} <b>${esc(g.name)}</b>${g.rally ? ` <span style="color:#089981">early rally, ${g.volx.toFixed(1)}× vol</span>` : ''} ${px(g.bottom)} – ${px(g.top)} <span style="color:#888">${g.size.toFixed(2)}× ATR</span></li>`).join('\n')
     : '<li style="color:#888">none</li>';
+  // Brief sections (#13): event-desk watchlist (morning), ledger evidence, and signals held for the brief.
+  let briefHtml = '';
+  try {
+    const morning = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }) < 12;
+    const wlFile = path.join(require('os').homedir(), 'market-lab', 'event-desk', 'data', 'digest', new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }), 'watchlist.json');
+    if (morning && fs.existsSync(wlFile)) briefHtml += `<h3 style="margin:18px 0 4px">Watchlist briefing (event desk)</h3>${JSON.parse(fs.readFileSync(wlFile, 'utf8')).body}`;
+    const ev = JSON.parse(fs.readFileSync(ledger.EVIDENCE, 'utf8'));
+    const pc = (x) => (x == null ? '–' : Math.round(100 * x) + '%');
+    const evRows = Object.entries(ev.groups).map(([k, v]) => [k, v['*']]).sort((a, b) => (b[1].proven - a[1].proven) || b[1].n - a[1].n)
+      .map(([k, r]) => `<tr><td style="padding:2px 8px">${esc(k.replace('|', ' · '))}</td><td style="padding:2px 8px;text-align:right">${r.n}</td><td style="padding:2px 8px;text-align:right">${pc(r.win)}</td><td style="padding:2px 8px;text-align:right">${pc(r.baseline)}</td><td style="padding:2px 8px;text-align:right">${r.meanNet == null ? '–' : (100 * r.meanNet).toFixed(2) + '%'}</td><td style="padding:2px 8px;font-weight:600;color:${r.proven ? '#089981' : '#999'}">${r.proven ? 'PROVEN · real-time' : 'brief only'}</td></tr>`).join('\n');
+    briefHtml += `<h3 style="margin:18px 0 4px">Evidence: which signals earn a real-time email (last ${ev.windowDays} days, after costs)</h3>
+<table cellspacing="0" style="font-size:13px;border-collapse:collapse"><tr><th style="text-align:left;padding:2px 8px">signal</th><th style="padding:2px 8px">n</th><th style="padding:2px 8px">net win</th><th style="padding:2px 8px">random</th><th style="padding:2px 8px">mean net</th><th></th></tr>
+${evRows}
+</table><div style="color:#666;font-size:12px">Proven = ≥ ${ev.minN} graded signals and the win rate's lower bound above random entry for the same assets (Kalshi: above price + fee). Everything else waits for these briefs.</div>`;
+    const held = ledger.open().prepare(`SELECT kind, sym, side, t, price FROM signals WHERE product='headless' AND source='live' AND emailed=0 AND t > ?
+      AND (kind IN ('flip:STRONG','rally','gap:futures')) ORDER BY t`).all(since);
+    const hl = held.map((h) => `<li>${esc(et(h.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · <b>${esc(h.sym.split(':')[1])}</b> ${esc(h.kind)} ${h.side === 'long' ? '⬆️' : '⬇️'} at ${px(h.price)}</li>`).join('\n');
+    briefHtml += `<h3 style="margin:18px 0 4px">Held for this brief: not proven enough for real-time (${held.length})</h3><ul style="margin:0;padding-left:18px">${hl || '<li style="color:#888">none</li>'}</ul>`;
+  } catch (e) { log('brief sections failed: ' + e.message); }
   let board = '';
   try {
     const st = await require('./headless-stats.js').computeStats();
@@ -474,10 +535,12 @@ ${changeHtml}
 <ul style="margin:0;padding-left:18px">
 ${gapHtml}
 </ul>
+${briefHtml}
 ${board}
 <p style="color:#666;font-size:12px;margin-top:16px">SuperTrend 3/10 on closed ${TF_MIN}m bars. Orange outline = flipped since last report. A time after a ticker = its last closed bar is older than 90 min (market closed or a lagging feed).${bad.length ? '<br><b style="color:#f23645">No data:</b> ' + esc(bad.map((r) => r.name + ' (' + r.error + ')').join(', ')) : ''}<br>Flip alerts email ${CFG.flipsEmailConfluence && CFG.minScore > 5 ? '⭐ confluence only' : CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE + STRONG'} · Headless Flip Watcher · not trading advice.</p>
 </div>`;
-  const subject = `📊 Flip matrix ${et(Date.now(), { hour: 'numeric', minute: '2-digit' })} · ${buys} BUY / ${ok.length - buys} SELL` + (changes.length ? ` · ${changes.length} flip${changes.length > 1 ? 's' : ''}` : '') + (gaps.length ? ` · ${gaps.length} FVG${gaps.length > 1 ? 's' : ''}` : '');
+  const isAM = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }) < 12;
+  const subject = `${isAM ? '☀️ Morning brief' : '🌙 Closing brief'} ${et(Date.now(), { hour: 'numeric', minute: '2-digit' })} · ${buys} BUY / ${ok.length - buys} SELL` + (changes.length ? ` · ${changes.length} flip${changes.length > 1 ? 's' : ''}` : '') + (gaps.length ? ` · ${gaps.length} FVG${gaps.length > 1 ? 's' : ''}` : '');
   if (!send) { fs.writeFileSync(path.join(DIR, 'headless-matrix-preview.html'), html); console.log(subject + '\npreview -> headless-matrix-preview.html'); return; }
   mail(subject, html, true);
   fs.writeFileSync(MATRIX_FILE, JSON.stringify({ sentAt: new Date().toISOString(), buys, sells: ok.length - buys }, null, 1));
