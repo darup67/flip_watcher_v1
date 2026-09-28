@@ -458,6 +458,9 @@
  ],
  "fvg": {
   "email": true,
-  "minAtr": 0.5
- }
+  "minAtr": 0.5,
+  "onlyConfluence": false
+ },
+ "extendedHours": true,
+ "flipsEmailConfluence": false
 }

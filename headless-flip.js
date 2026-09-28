@@ -46,7 +46,10 @@ async function getJSON(url) {
 // ---------- data sources: each returns [{t (ms, bar open), o, h, l, c}] ascending ----------
 
 async function yahoo(ticker) {
-  const j = await getJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=30m&range=30d`);
+  // Pre-market + after-hours bars for stocks (CFG.extendedHours, added 2026-09-28) so the 8:00 AM matrix
+  // and pre-market flips/gaps are live. Futures (=F) trade nearly 24h and ignore the flag.
+  const ext = CFG.extendedHours && !ticker.endsWith('=F') ? '&includePrePost=true' : '';
+  const j = await getJSON(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=30m&range=30d${ext}`);
   const res = j.chart.result[0];
   const q = res.indicators.quote[0];
   return (res.timestamp || []).map((t, i) => ({ t: t * 1000, o: q.open[i], h: q.high[i], l: q.low[i], c: q.close[i] }))
@@ -136,33 +139,30 @@ function priorFlips(hours) {
   });
 }
 
-function scoreSetup(flip, runFlips, regimes) {
+function scoreCore(side, same, regimes, recent) {
   const factors = [];
   let score = 0;
-  const prior = priorFlips(24);
-
-  // 1. Correlation: same-direction flips on this bar (this run + earlier runs for the same bar)
-  const names = new Set(runFlips.filter((f) => f.regime === flip.regime).map((f) => f.name));
-  prior.filter((p) => p.bar === flip.barTime && p.to === flip.regime).forEach((p) => names.add(p.name));
-  const same = names.size, n = Object.keys(regimes).length || CFG.symbols.length;
+  const n = Object.keys(regimes).length || CFG.symbols.length;
   const strongN = Math.max(4, Math.ceil(0.16 * n)), mildN = Math.max(2, Math.ceil(0.08 * n));   // 25 symbols → 4 / 2
-  if (same >= strongN) { score += 2; factors.push(`${same} symbols flipped ${flip.regime} together`); }
-  else if (same >= mildN) { score += 1; factors.push(`${same} correlated ${flip.regime} flips`); }
+  if (same >= strongN) { score += 2; factors.push(`${same} symbols flipped ${side} together`); }
+  else if (same >= mildN) { score += 1; factors.push(`${same} correlated ${side} flips`); }
   else factors.push('isolated flip');
-
-  // 2. Trend alignment against the post-flip regime map
   const vals = Object.values(regimes), total = vals.length;
-  const side = vals.filter((v) => v === flip.regime).length, pct = total ? side / total : 0;
-  if (pct >= 0.6) { score += 2; factors.push(`trend-aligned (${side}/${total} now ${flip.regime})`); }
-  else if (pct >= 0.4) { score += 1; factors.push(`mixed field (${side}/${total} ${flip.regime})`); }
-  else factors.push(`counter-trend (only ${side}/${total} ${flip.regime})`);
-
-  // 3. Stability: earlier flips of this symbol in 24h
-  const recent = prior.filter((p) => p.name === flip.name).length;
+  const cnt = vals.filter((v) => v === side).length, pct = total ? cnt / total : 0;
+  if (pct >= 0.6) { score += 2; factors.push(`trend-aligned (${cnt}/${total} now ${side})`); }
+  else if (pct >= 0.4) { score += 1; factors.push(`mixed field (${cnt}/${total} ${side})`); }
+  else factors.push(`counter-trend (only ${cnt}/${total} ${side})`);
   if (recent === 0) { score += 1; factors.push('fresh move (no flips in 24h)'); }
   else factors.push(`choppy (${recent} flip${recent > 1 ? 's' : ''} in 24h)`);
-
   return { score, label: score >= 4 ? 'STRONG' : score >= 2 ? 'MODERATE' : 'WEAK', factors };
+}
+
+function scoreSetup(flip, runFlips, regimes) {
+  const prior = priorFlips(24);
+  // Correlation: same-direction flips on this bar (this run + earlier runs for the same bar)
+  const names = new Set(runFlips.filter((f) => f.regime === flip.regime).map((f) => f.name));
+  prior.filter((p) => p.bar === flip.barTime && p.to === flip.regime).forEach((p) => names.add(p.name));
+  return scoreCore(flip.regime, names.size, regimes, prior.filter((p) => p.name === flip.name).length);
 }
 
 // ---------- fair value gaps (added 2026-09-28) ----------
@@ -247,20 +247,27 @@ async function run() {
 
   // Score BEFORE appending this run's flips, so stability sees only earlier flips.
   for (const f of flips) f.setup = scoreSetup(f, flips, state.regimes);
+  const recentGaps = recentFvgs(2);
+  for (const f of flips) {
+    const want = f.regime === 'BUY' ? 'BULL' : 'BEAR';
+    f.star = recentGaps.some((g) => g.name === f.name && g.side === want) || (f.fvg && f.fvg.side === want);
+  }
   for (const f of flips) {
     const arrow = f.regime === 'BUY' ? '⬆️' : '⬇️';
     fs.appendFileSync(ALERTS, `${new Date().toISOString()}\t${arrow} ${f.name} → ${f.regime}\t${f.name} ${f.regime === 'BUY' ? 'SELL' : 'BUY'} → ${f.regime}\tbar ${new Date(f.barTime).toISOString()}\t${f.setup.label}:${f.setup.score}\n`);
   }
   const minScore = CFG.minScore ?? 2;
-  const toSend = flips.filter((f) => f.setup.score >= minScore);
+  const toSend = flips.filter((f) => f.setup.score >= minScore || (CFG.flipsEmailConfluence && f.star));
   const held = flips.filter((f) => f.setup.score < minScore);
   if (toSend.length && CFG.mode === 'live') await sendEmail(toSend);
-  for (const f of fvgs) fs.appendFileSync(path.join(DIR, 'fvg-alerts.tsv'), `${new Date().toISOString()}\t${f.name}\t${f.fvg.side}\t${f.fvg.bottom}\t${f.fvg.top}\t${f.fvg.size.toFixed(2)}\tbar ${new Date(f.barTime).toISOString()}\n`);
+  for (const f of fvgs) fs.appendFileSync(path.join(DIR, 'fvg-alerts.tsv'), `${new Date().toISOString()}\t${f.name}\t${f.fvg.side}\t${f.fvg.bottom}\t${f.fvg.top}\t${f.fvg.size.toFixed(2)}\tbar ${new Date(f.barTime).toISOString()}\t${(f.fvg.side === 'BULL') === (f.regime === 'BUY') ? 'star' : ''}\n`);
   // What you can trade (user, 2026-09-28): futures can be shorted, so both sides; everything else is
   // long-only, so bullish gaps only. All gaps are still logged above.
   const groupOf = Object.fromEntries(CFG.symbols.map((x) => [x.tv, x.group]));
   const tradable = fvgs.filter((f) => groupOf[f.tv] === 'futures' || f.fvg.side === 'BULL');
-  if (tradable.length && CFG.fvg && CFG.fvg.email && CFG.mode === 'live') sendFvgEmail(tradable);
+  for (const f of tradable) f.star = (f.fvg.side === 'BULL') === (f.regime === 'BUY');   // ⭐ gap with the trend
+  const toMail = CFG.fvg && CFG.fvg.onlyConfluence ? tradable.filter((f) => f.star) : tradable;
+  if (toMail.length && CFG.fvg && CFG.fvg.email && CFG.mode === 'live') sendFvgEmail(toMail);
   log(`${flips.length ? 'FLIPS ' + flips.map((f) => `${f.name}→${f.regime} [${f.setup.label}:${f.setup.score}]`).join(' ') + (held.length ? ` · held back ${held.length} WEAK` : '') : 'no flips'} · ${ok.length}/${results.length} ok ` + (chartPaused ? '' : ` · agree with chart ${agree}/${ok.length}`) +
     (diff.length ? ` · differ: ${diff.join(' ')}` : '') + (errors.length ? ` · ERR ${errors.join('; ')}` : '') + ` · mode ${CFG.mode}`);
 }
@@ -272,13 +279,33 @@ function mail(subject, body, html = false) {
   execFileSync(process.execPath, [path.join(DIR, 'send-email.js'), subject, body], { env, timeout: 35000, stdio: 'ignore' });
 }
 
+function recentFvgs(hours) {
+  const f = path.join(DIR, 'fvg-alerts.tsv'), since = Date.now() - hours * 3600e3;
+  if (!fs.existsSync(f)) return [];
+  return fs.readFileSync(f, 'utf8').trim().split('\n').map((l) => l.split('\t'))
+    .filter((p) => Date.parse(p[0]) >= since).map((p) => ({ name: p[1], side: p[2] }));
+}
+
+// One line of history for an email, from headless-stats.json (refreshed by every matrix report).
+function statLine(kind, key) {
+  const st = readJSON(path.join(DIR, 'headless-stats.json'), null);
+  const v = st && st[kind] && st[kind][key];
+  if (!v) return '';
+  const p = (x) => (x == null ? '–' : Math.round(100 * x) + '%');
+  return kind === 'flips'
+    ? `History (${key}, n=${v.n}): right way ${p(v['4h'].right)} after 4h, ${p(v['24h'].right)} after 24h.`
+    : `History (${key}, n=${v.n}): price came back into the gap ${p(v.tested)} of the time and held ${p(v.held)}; right way ${p(v['24h'].right)} after 24h.`;
+}
+
 function sendFvgEmail(fvgs) {
   const fmt = (x) => (x >= 1000 ? x.toLocaleString('en-US', { maximumFractionDigits: 0 }) : x.toPrecision(4));
   const closed = new Date(fvgs[0].barTime + TF_MS).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
   const bull = fvgs.filter((f) => f.fvg.side === 'BULL'), bear = fvgs.filter((f) => f.fvg.side === 'BEAR');
-  const subject = `🟩🟥 FVG ${closed}: ` + [bull.length ? `${bull.length} bull (${bull.map((f) => f.name).join(', ')})` : '', bear.length ? `${bear.length} bear (${bear.map((f) => f.name).join(', ')})` : ''].filter(Boolean).join(' · ');
-  const line = (f) => `${f.fvg.side === 'BULL' ? '🟩' : '🟥'} ${f.name}  gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}  (${f.fvg.size.toFixed(2)}× ATR)  last ${fmt(f.price)}  · trend ${f.regime}`;
+  const stars = fvgs.filter((f) => f.star).length;
+  const subject = `🟩🟥 FVG ${closed}${stars ? ` ⭐${stars}` : ''}: ` + [bull.length ? `${bull.length} bull (${bull.map((f) => f.name).join(', ')})` : '', bear.length ? `${bear.length} bear (${bear.map((f) => f.name).join(', ')})` : ''].filter(Boolean).join(' · ');
+  const line = (f) => `${f.star ? '⭐' : '  '}${f.fvg.side === 'BULL' ? '🟩' : '🟥'} ${f.name}  gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}  (${f.fvg.size.toFixed(2)}× ATR)  last ${fmt(f.price)}  · trend ${f.regime}`;
   const body = `Fair value gaps confirmed on the 30m bar that closed ${closed} ET. Bullish gaps for everything; bearish gaps for futures only (shortable).\n\n` + [...bull, ...bear].map(line).join('\n') +
+    `\n\n⭐ = gap in the direction of the ticker's trend. ${statLine('gaps', '⭐ with trend')}\n${statLine('gaps', 'against trend')}` +
     `\n\nConfirmed = 3-candle gap complete on a closed bar, at least ${(CFG.fvg.minAtr || 0.2)}× ATR(14). Price often returns to fill a gap; not a signal on its own. Not advice.\n— Headless Flip Watcher`;
   mail(subject, body);
 }
@@ -286,8 +313,10 @@ function sendFvgEmail(fvgs) {
 async function sendEmail(flips) {
   const best = flips.some((f) => f.setup.label === 'STRONG') ? '🔥' : '⚡';
   const subject = `${best} ${flips.map((f) => `${f.regime === 'BUY' ? '⬆️' : '⬇️'} ${f.name} → ${f.regime}`).join(' · ')}`;
-  const body = flips.map((f) => `${f.regime === 'BUY' ? '⬆️' : '⬇️'} ${f.name} → ${f.regime}  ${SCORE_EMOJI[f.setup.label]} ${f.setup.label} (${f.setup.score}/5)\n` +
+  const body = flips.map((f) => `${f.star ? '⭐ ' : ''}${f.regime === 'BUY' ? '⬆️' : '⬇️'} ${f.name} → ${f.regime}  ${SCORE_EMOJI[f.setup.label]} ${f.setup.label} (${f.setup.score}/5)\n` +
+    (f.star ? '  · ⭐ confluence: same-direction FVG on this ticker in the last 2h\n' : '') +
     f.setup.factors.map((x) => `  · ${x}`).join('\n') + `\n  · 30m bar closed ${new Date(f.barTime + TF_MS).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' })} ET`).join('\n\n') +
+    `\n\n${statLine('flips', flips[0].setup.label)}${flips.some((f) => f.star) ? '\n' + statLine('flips', '⭐ confluence') : ''}` +
     '\n\n— Headless Flip Watcher (exchange data, no TradingView)';
   mail(subject, body);
 }
@@ -338,14 +367,31 @@ async function matrix(send) {
   const futNames = new Set(CFG.symbols.filter((x) => x.group === 'futures').map((x) => x.tv.split(':')[1]));
   const fvgFile = path.join(DIR, 'fvg-alerts.tsv');
   const gaps = fs.existsSync(fvgFile) ? fs.readFileSync(fvgFile, 'utf8').trim().split('\n').flatMap((line) => {
-    const [ts, name, side, bottom, top, size] = line.split('\t');
+    const [ts, name, side, bottom, top, size, , star] = line.split('\t');
     return Date.parse(ts) > since && (side === 'BULL' || futNames.has(name))
-      ? [{ t: Date.parse(ts), name, side, bottom: +bottom, top: +top, size: +size }] : [];
+      ? [{ t: Date.parse(ts), name, side, bottom: +bottom, top: +top, size: +size, star: star === 'star' }] : [];
   }) : [];
   const px = (x) => (x >= 1000 ? x.toLocaleString('en-US', { maximumFractionDigits: 0 }) : x.toPrecision(4));
   const gapHtml = gaps.length
-    ? gaps.map((g) => `<li>${esc(et(g.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · ${g.side === 'BULL' ? '🟩' : '🟥'} <b>${esc(g.name)}</b> ${px(g.bottom)} – ${px(g.top)} <span style="color:#888">${g.size.toFixed(2)}× ATR</span></li>`).join('\n')
+    ? gaps.map((g) => `<li>${esc(et(g.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · ${g.star ? '⭐' : ''}${g.side === 'BULL' ? '🟩' : '🟥'} <b>${esc(g.name)}</b> ${px(g.bottom)} – ${px(g.top)} <span style="color:#888">${g.size.toFixed(2)}× ATR</span></li>`).join('\n')
     : '<li style="color:#888">none</li>';
+  let board = '';
+  try {
+    const st = await require('./headless-stats.js').computeStats();
+    const p = (x) => (x == null ? '–' : Math.round(100 * x) + '%');
+    const td = (x, b) => `<td style="padding:2px 8px;text-align:right${b ? ';font-weight:600' : ''}">${x}</td>`;
+    const fr = Object.entries(st.flips).map(([k, v]) => `<tr><td style="padding:2px 8px">${esc(k)}</td>${td(v.n)}${td(p(v['4h'].right))}${td(p(v['24h'].right), 1)}</tr>`).join('\n');
+    const gr = Object.entries(st.gaps).map(([k, v]) => `<tr><td style="padding:2px 8px">${esc(k)}</td>${td(v.n)}${td(p(v.tested))}${td(p(v.held), 1)}${td(p(v['24h'].right))}</tr>`).join('\n');
+    const th = (a) => a.map((x) => `<th style="padding:2px 8px;text-align:right;color:#666;font-weight:400">${x}</th>`).join('');
+    board = `<h3 style="margin:18px 0 4px">Scoreboard: what happened after past signals (since ${esc(st.from.slice(0, 10))})</h3>
+<table cellspacing="0" style="font-size:13px;border-collapse:collapse"><tr><th style="text-align:left;padding:2px 8px">Flips</th>${th(['n', 'right 4h', 'right 24h'])}</tr>
+${fr}
+</table>
+<table cellspacing="0" style="font-size:13px;border-collapse:collapse;margin-top:8px"><tr><th style="text-align:left;padding:2px 8px">Tradable gaps</th>${th(['n', 'tested 24h', 'held', 'right 24h'])}</tr>
+${gr}
+</table>
+<div style="color:#666;font-size:12px">"Right" = moved in the signal's direction (BUY/bull long, SELL/bear short). Held = came back into the gap without closing through it. Before fees; history, not advice.</div>`;
+  } catch (e) { log('scoreboard failed: ' + e.message); }
   const html = `<div style="font:14px -apple-system,Helvetica,Arial;color:#222;max-width:760px">
 <h2 style="margin:0 0 4px">Flip matrix · ${esc(when)} ET</h2>
 <div style="font-size:15px;margin-bottom:12px"><b style="color:#089981">${buys} BUY</b> / <b style="color:#f23645">${ok.length - buys} SELL</b> of ${ok.length} · ${Math.round(100 * (ok.length - buys) / (ok.length || 1))}% SELL${last.buys != null ? ` · last report ${last.buys} BUY / ${last.sells} SELL` : ''}</div>
@@ -361,6 +407,7 @@ ${changeHtml}
 <ul style="margin:0;padding-left:18px">
 ${gapHtml}
 </ul>
+${board}
 <p style="color:#666;font-size:12px;margin-top:16px">SuperTrend 3/10 on closed 30m bars. Orange outline = flipped since last report. A time after a ticker = its last closed bar is older than 90 min (market closed or a lagging feed).${bad.length ? '<br><b style="color:#f23645">No data:</b> ' + esc(bad.map((r) => r.name + ' (' + r.error + ')').join(', ')) : ''}<br>Flip alerts email ${CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE + STRONG'} · Headless Flip Watcher · not trading advice.</p>
 </div>`;
   const subject = `📊 Flip matrix ${et(Date.now(), { hour: 'numeric', minute: '2-digit' })} · ${buys} BUY / ${ok.length - buys} SELL` + (changes.length ? ` · ${changes.length} flip${changes.length > 1 ? 's' : ''}` : '') + (gaps.length ? ` · ${gaps.length} FVG${gaps.length > 1 ? 's' : ''}` : '');
@@ -390,6 +437,15 @@ async function status() {
   const buys = ok.filter((r) => r.regime === 'BUY').length;
   console.log(`\n${ok.length}/${results.length} symbols ok · ${buys} BUY / ${ok.length - buys} SELL · mode ${CFG.mode}, emails ${CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE + STRONG'}` +
     (paused ? ' · chart watcher paused (no comparison)' : ` · agree with chart ${agree}/${ok.length}`));
+}
+
+async function reseed() {
+  const state = readJSON(STATE_FILE, { regimes: {}, bars: {} }), results = await evaluateAll();
+  let changed = 0;
+  for (const r of results) if (!r.error) { if (state.regimes[r.tv] !== r.regime) changed++; state.regimes[r.tv] = r.regime; state.bars[r.tv] = r.barTime; }
+  state.updated = new Date().toISOString();
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 1));
+  log(`RESEED: ${changed} regimes changed by recalculation (not emailed)`);
 }
 
 async function fvgReplay(hours) {
@@ -455,6 +511,10 @@ function compare(hours, headFile = ALERTS) {
   if (onlyChart.length) console.log('only chart:\n  ' + onlyChart.map(fmt).join('\n  '));
 }
 
+module.exports = { CFG, TF_MS, DIR, SOURCES, pool, supertrendRegimes, scoreCore, atrSeries, fvgAt };
+
+if (require.main === module) {
 const arg = process.argv[2];
-(arg === '--fvg-replay' ? fvgReplay(+process.argv[3] || 72) : arg === '--matrix' ? matrix(true) : arg === '--matrix-preview' ? matrix(false) : arg === '--status' ? status() : arg === '--replay' ? replay(+process.argv[3] || 72) : arg === '--compare' ? Promise.resolve(compare(+process.argv[3] || 48)) : run())
+(arg === '--reseed' ? reseed() : arg === '--fvg-replay' ? fvgReplay(+process.argv[3] || 72) : arg === '--matrix' ? matrix(true) : arg === '--matrix-preview' ? matrix(false) : arg === '--status' ? status() : arg === '--replay' ? replay(+process.argv[3] || 72) : arg === '--compare' ? Promise.resolve(compare(+process.argv[3] || 48)) : run())
   .catch((e) => { log('FATAL ' + (e.stack || e.message)); process.exit(1); });
+}
