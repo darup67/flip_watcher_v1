@@ -54,7 +54,7 @@ function rally(b, f, i) {
 async function main() {
   const syms = CFG.symbols.filter((s) => s.group !== 'futures');
   const data = (await pool(syms, CFG.concurrency || 8, async (s) => {
-    try { const b = (await SOURCES[s.source](s.ticker)).filter((x) => x.t + TF_MS <= Date.now()); return b.length > 80 ? { s, b, f: features(b) } : null; }
+    try { const b = (await require(require('path').join(require('os').homedir(), 'trade-core', 'bars.js')).getBars(s)).filter((x) => x.t + TF_MS <= Date.now()); return b.length > 80 ? { s, b, f: features(b) } : null; }
     catch { return null; }
   })).filter(Boolean);
   const tMin = Math.min(...data.map((d) => d.b[60].t)), tMax = Math.max(...data.map((d) => d.b[d.b.length - 49].t));
