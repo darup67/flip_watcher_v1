@@ -22,7 +22,10 @@ const STATE_FILE = path.join(DIR, 'headless-state.json');
 const ALERTS = path.join(DIR, 'headless-alerts.tsv');
 const LOG = path.join(DIR, 'headless-flip.log');
 // Bar size for the whole universe (CFG.tfMinutes; 15 since 2026-09-28, was 30). Every source follows it.
-const TF_MIN = +process.env.HEADLESS_TF || CFG.tfMinutes || 30;   // HEADLESS_TF: research override only
+// Bars come from trade-core's shared store (closed 15m bars, fetched incrementally, crypto fallbacks).
+// The base is always 15m; flips run on signals.flipTf (15), and 30m/1h are merged locally by agg().
+const core = require(path.join(require('os').homedir(), 'trade-core', 'bars.js'));
+const TF_MIN = 15;
 const TF_MS = TF_MIN * 60 * 1000;
 
 const log = (msg) => {
@@ -226,7 +229,7 @@ function frame(bars, tfMin) {
 // ---------- core ----------
 
 async function evaluate(sym) {
-  const bars = await SOURCES[sym.source](sym.ticker);
+  const bars = agg(await core.getBars(sym), (CFG.signals && CFG.signals.flipTf) || 15);
   const now = Date.now();
   const confirmed = bars.filter((b) => b.t + TF_MS <= now);
   if (confirmed.length < CFG.atrLen + 5) throw new Error(`only ${confirmed.length} confirmed bars`);
@@ -516,7 +519,7 @@ async function fvgReplay(hours) {
   const since = Date.now() - hours * 3600e3, perBar = {};
   await pool(CFG.symbols, CFG.concurrency || 8, async (sym) => {
     try {
-      const bars = (await SOURCES[sym.source](sym.ticker)).filter((b) => b.t + TF_MS <= Date.now()), atr = atrSeries(bars);
+      const bars = (await core.getBars(sym)).filter((b) => b.t + TF_MS <= Date.now()), atr = atrSeries(bars);
       for (let i = 2; i < bars.length; i++) if (bars[i].t + TF_MS >= since) {
         const f = fvgAt(bars, i, atr, (CFG.fvg && CFG.fvg.minAtr) || 0.2);
         if (f) (perBar[bars[i].t] = perBar[bars[i].t] || []).push(sym.tv.split(':')[1] + ' ' + f.side);
@@ -532,7 +535,7 @@ async function replay(hours) {
   const since = Date.now() - hours * 3600e3, lines = [];
   await pool(CFG.symbols, CFG.concurrency || 8, async (sym) => {
     try {
-      const bars = (await SOURCES[sym.source](sym.ticker)).filter((b) => b.t + TF_MS <= Date.now());
+      const bars = (await core.getBars(sym)).filter((b) => b.t + TF_MS <= Date.now());
       const regs = supertrendRegimes(bars, CFG.factor, CFG.atrLen);
       for (let i = 1; i < bars.length; i++) {
         const close = bars[i].t + TF_MS;

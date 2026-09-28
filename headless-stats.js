@@ -39,7 +39,7 @@ async function computeStats() {
   const minAtr = (CFG.fvg && CFG.fvg.minAtr) || 0.2;
   const series = (await pool(CFG.symbols, CFG.concurrency || 8, async (sym) => {
     try {
-      const bars = (await SOURCES[sym.source](sym.ticker)).filter((b) => b.t + TF_MS <= Date.now());
+      const bars = (await require(require('path').join(require('os').homedir(), 'trade-core', 'bars.js')).getBars(sym)).filter((b) => b.t + TF_MS <= Date.now());
       if (bars.length < CFG.atrLen + 5) return null;
       const mk = (tf) => { const b = agg(bars, tf); return { tf, ms: tf * 60000, bars: b, regs: supertrendRegimes(b, CFG.factor, CFG.atrLen), atr: atrSeries(b) }; };
       return { sym, name: sym.tv.split(':')[1], fut: sym.group === 'futures', bars,
