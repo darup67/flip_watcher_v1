@@ -306,7 +306,7 @@ async function run() {
   state.updated = new Date().toISOString();
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 1));
 
-  const chartPaused = fs.existsSync(path.join(DIR, 'CHART_WATCHER_PAUSED'));
+  const chartPaused = true /* chart watcher retired 2026-09-28 */;
   const chart = chartPaused ? {} : chartRegimes();
   const ok = results.filter((r) => !r.error);
   const agree = ok.filter((r) => chart[r.tv] === r.regime).length;
@@ -549,7 +549,7 @@ ${board}
 
 async function status() {
   const results = await evaluateAll();
-  const paused = fs.existsSync(path.join(DIR, 'CHART_WATCHER_PAUSED'));
+  const paused = true /* chart watcher retired 2026-09-28 */;
   const chart = paused ? {} : chartRegimes();
   const state = readJSON(STATE_FILE, { regimes: {} });
   const et = (t) => new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });

@@ -1,5 +1,0 @@
-Chart-based flip-notifier.js paused 2026-09-28: Flux Lab SMC took the Scanner chart slot (free tier).
-Flip emails come from headless-flip.js (mode live). To restore the chart watcher:
-  put the Watchlist Flip Scanner back on the chart, then
-  launchctl enable gui/501/com.dhruv.flipnotifier && launchctl bootstrap gui/501 ~/Library/LaunchAgents/com.dhruv.flipnotifier.plist
-  rm ~/flip-notifier/CHART_WATCHER_PAUSED
