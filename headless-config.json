@@ -1,6 +1,6 @@
 {
  "mode": "live",
- "minScore": 2,
+ "minScore": 4,
  "concurrency": 8,
  "factor": 3.0,
  "atrLen": 10,
