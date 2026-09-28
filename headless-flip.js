@@ -53,7 +53,10 @@ async function yahoo(ticker) {
   const res = j.chart.result[0];
   const q = res.indicators.quote[0];
   return (res.timestamp || []).map((t, i) => ({ t: t * 1000, o: q.open[i], h: q.high[i], l: q.low[i], c: q.close[i], v: q.volume ? q.volume[i] || 0 : 0 }))
-    .filter((b) => b.o != null && b.h != null && b.l != null && b.c != null);
+    .filter((b) => b.o != null && b.h != null && b.l != null && b.c != null)
+    // With includePrePost Yahoo also returns off-grid points (e.g. 5:26:40 PM, zero volume): a stale
+    // last trade, not a 30m bar. One produced a false BLK flip + 2.9x ATR "gap" (2026-09-28 18:01).
+    .filter((b) => b.t % TF_MS === 0);
 }
 
 async function coinbase(product) {
