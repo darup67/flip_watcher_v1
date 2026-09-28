@@ -160,7 +160,8 @@ async function run() {
   state.updated = new Date().toISOString();
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 1));
 
-  const chart = chartRegimes();
+  const chartPaused = fs.existsSync(path.join(DIR, 'CHART_WATCHER_PAUSED'));
+  const chart = chartPaused ? {} : chartRegimes();
   const ok = results.filter((r) => !r.error);
   const agree = ok.filter((r) => chart[r.tv] === r.regime).length;
   const diff = ok.filter((r) => chart[r.tv] && chart[r.tv] !== r.regime).map((r) => `${r.name}(h:${r.regime}/c:${chart[r.tv]})`);
@@ -170,7 +171,7 @@ async function run() {
     fs.appendFileSync(ALERTS, `${new Date().toISOString()}\t${arrow} ${f.name} → ${f.regime}\t${f.name} ${f.prev === f.regime ? '?' : (f.regime === 'BUY' ? 'SELL' : 'BUY')} → ${f.regime}\tbar ${new Date(f.barTime).toISOString()}\n`);
   }
   if (flips.length && CFG.mode === 'live') await sendEmail(flips);
-  log(`${flips.length ? 'FLIPS ' + flips.map((f) => `${f.name}→${f.regime}`).join(' ') : 'no flips'} · ${ok.length}/${results.length} ok · agree with chart ${agree}/${ok.length}` +
+  log(`${flips.length ? 'FLIPS ' + flips.map((f) => `${f.name}→${f.regime}`).join(' ') : 'no flips'} · ${ok.length}/${results.length} ok ` + (chartPaused ? '' : ` · agree with chart ${agree}/${ok.length}`) +
     (diff.length ? ` · differ: ${diff.join(' ')}` : '') + (errors.length ? ` · ERR ${errors.join('; ')}` : '') + ` · mode ${CFG.mode}`);
 }
 
