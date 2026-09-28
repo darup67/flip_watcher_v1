@@ -192,6 +192,37 @@ function fvgAt(bars, i, atr, minAtr) {
   return null;
 }
 
+// ---------- multi-timeframe mix (2026-09-28) ----------
+// Only the base bars (tfMinutes, 15) are downloaded; 30m and 1h are built locally by merging
+// complete groups of base bars, so the mix adds no network requests.
+//   flips  : SuperTrend on the base bars (15m)            — best STRONG-flip record
+//   rallies: 🚀 bull FVG on >= rallyVolX volume, 30m bars — only TF beating random in both halves
+//   gaps   : FVG alerts on 1h bars (futures both sides)   — 1h gaps held 61% vs 34% on 15m
+const SIG = { rally: (CFG.signals && CFG.signals.rallyTf) || 30, gap: (CFG.signals && CFG.signals.gapTf) || 60 };
+
+function agg(bars, tfMin) {
+  const ms = tfMin * 60000, need = ms / TF_MS;
+  if (need <= 1) return bars;
+  const out = [];
+  let cur = null;
+  for (const b of bars) {
+    const k = Math.floor(b.t / ms) * ms;
+    if (!cur || cur.t !== k) { if (cur && cur.n === need) out.push(cur); cur = { t: k, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v || 0, n: 1 }; }
+    else { cur.h = Math.max(cur.h, b.h); cur.l = Math.min(cur.l, b.l); cur.c = b.c; cur.v += b.v || 0; cur.n++; }
+  }
+  if (cur && cur.n === need) out.push(cur);
+  return out;
+}
+
+function frame(bars, tfMin) {
+  const n = bars.length;
+  if (n < CFG.atrLen + 15) return null;
+  const regs = supertrendRegimes(bars, CFG.factor, CFG.atrLen), atrs = atrSeries(bars);
+  const fvg = fvgAt(bars, n - 1, atrs, (CFG.fvg && CFG.fvg.minAtr) || 0.2);
+  const prior = bars.slice(Math.max(0, n - 21), n - 1).map((b) => b.v || 0), vavg = prior.reduce((a, x) => a + x, 0) / (prior.length || 1);
+  return { tf: tfMin, barTime: bars[n - 1].t, regime: regs[n - 1], fvg, volx: vavg > 0 ? (bars[n - 1].v || 0) / vavg : 0, atr: atrs[n - 1], price: bars[n - 1].c };
+}
+
 // ---------- core ----------
 
 async function evaluate(sym) {
@@ -205,7 +236,8 @@ async function evaluate(sym) {
   const fvg = fvgAt(confirmed, n - 1, atrs, (CFG.fvg && CFG.fvg.minAtr) || 0.2);
   const prior = confirmed.slice(Math.max(0, n - 21), n - 1).map((b) => b.v || 0), vavg = prior.reduce((a, x) => a + x, 0) / (prior.length || 1);
   const volx = vavg > 0 ? (confirmed[n - 1].v || 0) / vavg : 0;
-  return { tv: sym.tv, name: sym.tv.split(':')[1], regime: regs[n - 1], prev: regs[n - 2], fvg, volx, atr: atrs[n - 1], price: confirmed[n - 1].c, barTime: confirmed[n - 1].t, ageMin: Math.round((now - confirmed[n - 1].t - TF_MS) / 60000) };
+  return { tv: sym.tv, name: sym.tv.split(':')[1], regime: regs[n - 1], prev: regs[n - 2], fvg, volx, atr: atrs[n - 1], price: confirmed[n - 1].c, barTime: confirmed[n - 1].t, ageMin: Math.round((now - confirmed[n - 1].t - TF_MS) / 60000),
+           rallyF: frame(agg(confirmed, SIG.rally), SIG.rally), gapF: frame(agg(confirmed, SIG.gap), SIG.gap) };
 }
 
 // Run fn over items with at most `limit` in flight (keeps exchanges from throttling).
@@ -237,10 +269,17 @@ async function run() {
   const flips = [], fvgs = [], errors = [];
   for (const r of results) {
     if (r.error) { errors.push(`${r.name}: ${r.error}`); continue; }
+    // Each frame fires once per new closed bar of its own timeframe; a frame's first sighting only
+    // records a baseline (so adding or changing a timeframe never floods the inbox).
+    for (const [key, F] of [['rally', r.rallyF], ['gap', r.gapF]]) {
+      const seen = (state[`bars_${key}`] = state[`bars_${key}`] || {});
+      if (!F || seen[r.tv] === F.barTime) continue;
+      if (seen[r.tv] && F.fvg) fvgs.push({ tv: r.tv, name: r.name, kind: key, ...F });
+      seen[r.tv] = F.barTime;
+    }
     const known = state.regimes[r.tv];
-    if (state.bars[r.tv] === r.barTime) continue;           // bar already processed
+    if (state.bars[r.tv] === r.barTime) continue;           // base bar already processed
     if (known && known !== r.regime) flips.push(r);
-    if (r.fvg && state.bars[r.tv]) fvgs.push(r);            // skip a symbol's very first bar (no baseline yet)
     state.regimes[r.tv] = r.regime;
     state.bars[r.tv] = r.barTime;
   }
@@ -268,7 +307,6 @@ async function run() {
   const toSend = flips.filter((f) => f.setup.score >= minScore || (CFG.flipsEmailConfluence && f.star));
   const held = flips.filter((f) => !toSend.includes(f));
   if (toSend.length && CFG.mode === 'live') await sendEmail(toSend);
-  for (const f of fvgs) fs.appendFileSync(path.join(DIR, 'fvg-alerts.tsv'), `${new Date().toISOString()}\t${f.name}\t${f.fvg.side}\t${f.fvg.bottom}\t${f.fvg.top}\t${f.fvg.size.toFixed(2)}\tbar ${new Date(f.barTime).toISOString()}\t${(f.fvg.side === 'BULL') === (f.regime === 'BUY') ? 'star' : ''}\t${f.volx.toFixed(2)}\t${f.rally ? 'rally' : ''}\n`);
   // What you can trade (user, 2026-09-28): futures can be shorted, so both sides; everything else is
   // long-only, so bullish gaps only. All gaps are still logged above.
   const groupOf = Object.fromEntries(CFG.symbols.map((x) => [x.tv, x.group]));
@@ -277,8 +315,10 @@ async function run() {
   // 30% / 41% of the time (older / newest third of history) vs 27% / 31% for any bar and 24% / 26%
   // for the SuperTrend BUY flip, firing ~1 bar before the flip. Plain bull gaps: 23% / 30%.
   const rallyX = (CFG.fvg && CFG.fvg.rallyVolX) || 2.5;
-  for (const f of fvgs) f.rally = groupOf[f.tv] !== 'futures' && f.fvg.side === 'BULL' && f.volx >= rallyX;
-  const tradable = fvgs.filter((f) => groupOf[f.tv] === 'futures' || (f.fvg.side === 'BULL' && (f.rally || (CFG.fvg && CFG.fvg.nonFuturesMode === 'all'))));
+  for (const f of fvgs) f.rally = f.kind === 'rally' && groupOf[f.tv] !== 'futures' && f.fvg.side === 'BULL' && f.volx >= rallyX;
+  const tradable = fvgs.filter((f) => f.rally || (f.kind === 'gap' && (groupOf[f.tv] === 'futures' ||
+    (f.fvg.side === 'BULL' && CFG.fvg && CFG.fvg.nonFuturesMode === 'all'))));
+  for (const f of fvgs.filter((x) => x.kind === 'gap' || x.rally)) fs.appendFileSync(path.join(DIR, 'fvg-alerts.tsv'), `${new Date().toISOString()}\t${f.name}\t${f.fvg.side}\t${f.fvg.bottom}\t${f.fvg.top}\t${f.fvg.size.toFixed(2)}\tbar ${new Date(f.barTime).toISOString()}\t${(f.fvg.side === 'BULL') === (f.regime === 'BUY') ? 'star' : ''}\t${f.volx.toFixed(2)}\t${f.rally ? 'rally' : ''}\t${f.tf}m\n`);
   for (const f of tradable) f.star = (f.fvg.side === 'BULL') === (f.regime === 'BUY');   // ⭐ gap with the trend
   const toMail = CFG.fvg && CFG.fvg.onlyConfluence ? tradable.filter((f) => f.star) : tradable;
   if (toMail.length && CFG.fvg && CFG.fvg.email && CFG.mode === 'live') sendFvgEmail(toMail);
@@ -315,7 +355,7 @@ function rallyVol() { return (CFG.fvg && CFG.fvg.rallyVolX) || 2.5; }
 
 function sendFvgEmail(fvgs) {
   const fmt = (x) => (x >= 1000 ? x.toLocaleString('en-US', { maximumFractionDigits: 0 }) : x.toPrecision(4));
-  const closed = new Date(fvgs[0].barTime + TF_MS).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+  const closed = new Date(Math.max(...fvgs.map((f) => f.barTime + (f.tf || TF_MIN) * 60000))).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
   const bull = fvgs.filter((f) => f.fvg.side === 'BULL'), bear = fvgs.filter((f) => f.fvg.side === 'BEAR');
   const stars = fvgs.filter((f) => f.star).length, rallies = fvgs.filter((f) => f.rally);
   const fut = fvgs.filter((f) => !f.rally);   // futures gaps (both sides), or plain bull gaps if nonFuturesMode = 'all'
@@ -324,9 +364,9 @@ function sendFvgEmail(fvgs) {
     ? `🚀 Early rally ${closed}: ${rallies.map((f) => f.name).join(', ')}${futTxt ? ' · ' + futTxt : ''}`
     : `🟩🟥 FVG ${closed}${stars ? ` ⭐${stars}` : ''}: ${futTxt}`;
   const line = (f) => f.rally
-    ? `🚀 ${f.name}  EARLY RALLY · bull gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)} on ${f.volx.toFixed(1)}× volume · entry ~${fmt(f.price)}, stop ${fmt(f.price - f.atr)} (−1 ATR), target ${fmt(f.price + 2 * f.atr)} (+2 ATR) · trend ${f.regime}${f.star ? ' ⭐' : ''}`
-    : `${f.star ? '⭐' : '  '}${f.fvg.side === 'BULL' ? '🟩' : '🟥'} ${f.name}  gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}  (${f.fvg.size.toFixed(2)}× ATR)  last ${fmt(f.price)}  · trend ${f.regime}`;
-  const body = `Signals confirmed on the ${TF_MIN}m bar that closed ${closed} ET.\n🚀 = early rally (stocks/ETFs/crypto): bull gap on ≥ ${rallyVol()}× average volume. Futures: bullish and bearish gaps (shortable).\n\n` + [...rallies, ...fut].map(line).join('\n') +
+    ? `🚀 ${f.name}  EARLY RALLY (${f.tf}m) · bull gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)} on ${f.volx.toFixed(1)}× volume · entry ~${fmt(f.price)}, stop ${fmt(f.price - f.atr)} (−1 ATR), target ${fmt(f.price + 2 * f.atr)} (+2 ATR) · trend ${f.regime}${f.star ? ' ⭐' : ''}`
+    : `${f.star ? '⭐' : '  '}${f.fvg.side === 'BULL' ? '🟩' : '🟥'} ${f.name} (${f.tf === 60 ? '1h' : f.tf + 'm'})  gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}  (${f.fvg.size.toFixed(2)}× ATR)  last ${fmt(f.price)}  · trend ${f.regime}`;
+  const body = `Signals confirmed on bars closing by ${closed} ET.\n🚀 = early rally (stocks/ETFs/crypto, ${SIG.rally}m bars): bull gap on ≥ ${rallyVol()}× average volume. Futures: bullish and bearish gaps on ${SIG.gap === 60 ? '1h' : SIG.gap + 'm'} bars (shortable).\n\n` + [...rallies, ...fut].map(line).join('\n') +
     (rallies.length ? `\n\nEarly-rally history: +2 ATR before −1 ATR hit 30% (older) / 41% (recent) of the time vs 27% / 31% for a random bar; break-even for 2:1 is 33%. Edge is modest and market-dependent.` : '') +
     `\n\n⭐ = gap in the direction of the ticker's trend. ${statLine('gaps', '⭐ with trend')}\n${statLine('gaps', 'against trend')}` +
     `\n\nConfirmed = 3-candle gap complete on a closed bar, at least ${(CFG.fvg.minAtr || 0.2)}× ATR(14). Price often returns to fill a gap; not a signal on its own. Not advice.\n— Headless Flip Watcher`;
@@ -535,7 +575,7 @@ function compare(hours, headFile = ALERTS) {
   if (onlyChart.length) console.log('only chart:\n  ' + onlyChart.map(fmt).join('\n  '));
 }
 
-module.exports = { CFG, TF_MS, DIR, SOURCES, pool, supertrendRegimes, scoreCore, atrSeries, fvgAt, sendFvgEmail };
+module.exports = { CFG, TF_MS, DIR, SOURCES, pool, supertrendRegimes, scoreCore, atrSeries, fvgAt, sendFvgEmail, agg, SIG };
 
 if (require.main === module) {
 const arg = process.argv[2];

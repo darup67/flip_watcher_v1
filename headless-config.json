@@ -467,5 +467,11 @@
  "extendedHours": true,
  "flipsEmailConfluence": false,
  "_flips_email_comment": "2026-09-28 (user): flip emails are STRONG only (minScore 4). On 15m history STRONG was the best flip bucket (53% right at 4h, 57% at 24h, n=277). The earlier ⭐-only rule was flipsEmailConfluence true + minScore 99.",
- "tfMinutes": 15
+ "tfMinutes": 15,
+ "signals": {
+  "flipTf": 15,
+  "rallyTf": 30,
+  "gapTf": 60,
+  "_comment": "2026-09-28 mix: only base (tfMinutes) bars are fetched; 30m/1h are merged locally."
+ }
 }
