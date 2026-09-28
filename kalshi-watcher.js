@@ -139,9 +139,9 @@ const run = (cmd, cmdArgs) => new Promise(resolve => {
  * Muting a channel should change where a signal goes, never whether it is
  * recorded, or a quiet period becomes a hole in the history.
  */
-let channels = { banner: true, sound: true, speak: true, email: true };
+let channels = { banner: true, sound: true, speak: false, email: true };   // voice off (user, 2026-09-28)
 
-const CHANNEL_DEFAULTS = { banner: true, sound: true, speak: true, email: true };
+const CHANNEL_DEFAULTS = { banner: true, sound: true, speak: false, email: true };
 
 async function notify(title, body, { sound = 'Submarine', speak = null } = {}) {
   const esc = s => String(s)
@@ -163,7 +163,7 @@ async function notify(title, body, { sound = 'Submarine', speak = null } = {}) {
     if (existsSync(soundFile)) await run('/usr/bin/afplay', [soundFile]);
   }
 
-  if (channels.speak && speak && process.env.FLIP_SPEAK !== '0') {
+  if (channels.speak && speak && process.env.FLIP_SPEAK === '1') {
     run('/usr/bin/say', ['-r', '210', '-v', 'Samantha', speak]).catch(() => {});
   }
 
