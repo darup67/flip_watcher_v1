@@ -455,5 +455,9 @@
    "ticker": "TSLA",
    "group": "mega tech"
   }
- ]
+ ],
+ "fvg": {
+  "email": true,
+  "minAtr": 0.5
+ }
 }
