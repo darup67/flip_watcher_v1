@@ -11,6 +11,7 @@
 //   node headless-flip.js --status     current regimes vs chart notifier
 //   node headless-flip.js --compare 48 flips vs alerts.tsv over last 48h
 //   node headless-flip.js --replay 72  recompute past flips from history, compare
+//   node headless-flip.js --matrix     email the BUY/SELL matrix report (--matrix-preview writes html only)
 
 const fs = require('fs');
 const path = require('path');
@@ -234,17 +235,81 @@ async function run() {
     (diff.length ? ` · differ: ${diff.join(' ')}` : '') + (errors.length ? ` · ERR ${errors.join('; ')}` : '') + ` · mode ${CFG.mode}`);
 }
 
-async function sendEmail(flips) {
-  // send-email.js is a CLI (same one the chart notifier uses); password from Keychain.
+function mail(subject, body, html = false) {
   const { execFileSync } = require('child_process');
-  const env = { ...process.env };
+  const env = { ...process.env, SEND_EMAIL_HTML: html ? '1' : '0' };
   if (!env.FLIP_GMAIL_APP_PASSWORD) env.FLIP_GMAIL_APP_PASSWORD = execFileSync('security', ['find-generic-password', '-a', 'darup67@gmail.com', '-s', 'flip-notifier-gmail', '-w']).toString().trim();
+  execFileSync(process.execPath, [path.join(DIR, 'send-email.js'), subject, body], { env, timeout: 35000, stdio: 'ignore' });
+}
+
+async function sendEmail(flips) {
   const best = flips.some((f) => f.setup.label === 'STRONG') ? '🔥' : '⚡';
   const subject = `${best} ${flips.map((f) => `${f.regime === 'BUY' ? '⬆️' : '⬇️'} ${f.name} → ${f.regime}`).join(' · ')}`;
   const body = flips.map((f) => `${f.regime === 'BUY' ? '⬆️' : '⬇️'} ${f.name} → ${f.regime}  ${SCORE_EMOJI[f.setup.label]} ${f.setup.label} (${f.setup.score}/5)\n` +
     f.setup.factors.map((x) => `  · ${x}`).join('\n') + `\n  · 30m bar closed ${new Date(f.barTime + TF_MS).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' })} ET`).join('\n\n') +
     '\n\n— Headless Flip Watcher (exchange data, no TradingView)';
-  execFileSync(process.execPath, [path.join(DIR, 'send-email.js'), subject, body], { env, timeout: 35000, stdio: 'ignore' });
+  mail(subject, body);
+}
+
+// ---------- daily matrix report (08:00 + 16:30, com.dhruv.headlessmatrix) ----------
+
+const MATRIX_FILE = path.join(DIR, 'headless-matrix.json');
+const GROUP_ORDER = ['your picks', 'leveraged ETFs', 'futures', 'crypto', 'mega tech', 'semis', 'software/security', 'hardware', 'sector ETFs', 'financials'];
+
+async function matrix(send) {
+  const results = await evaluateAll();
+  const last = readJSON(MATRIX_FILE, {});
+  const since = last.sentAt ? Date.parse(last.sentAt) : Date.now() - 24 * 3600e3;
+  const et = (t, opt) => new Date(t).toLocaleString('en-US', { timeZone: 'America/New_York', ...opt });
+  const esc = (x) => String(x).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const groupOf = Object.fromEntries(CFG.symbols.map((x) => [x.tv, x.group || 'other']));
+  const ok = results.filter((r) => !r.error), bad = results.filter((r) => r.error);
+  const buys = ok.filter((r) => r.regime === 'BUY').length;
+
+  // flips since the last report (all scores — the report is where MODERATE/WEAK get seen)
+  const changes = fs.existsSync(ALERTS) ? fs.readFileSync(ALERTS, 'utf8').trim().split('\n').flatMap((line) => {
+    const [ts, , detail, , score] = line.split('\t');
+    const m = detail && detail.match(/^(\S+) (BUY|SELL) → (BUY|SELL)/);
+    return m && Date.parse(ts) > since ? [{ t: Date.parse(ts), name: m[1], to: m[3], score: score || '' }] : [];
+  }) : [];
+  const flippedNames = new Set(changes.map((c) => c.name));
+
+  const chip = (r) => {
+    const buy = r.regime === 'BUY', stale = Date.now() - (r.barTime + TF_MS) > 90 * 60e3;
+    return `<td style="padding:5px 8px;border-radius:4px;background:${buy ? '#089981' : '#f23645'};color:#fff;font:600 12px -apple-system,Helvetica,Arial;white-space:nowrap${flippedNames.has(r.name) ? ';outline:2px solid #f5a623' : ''}">${esc(r.name)}${stale ? ' <span style="opacity:.75;font-weight:400">·' + esc(et(r.barTime + TF_MS, { weekday: 'short', hour: 'numeric', minute: '2-digit' })) + '</span>' : ''}</td>`;
+  };
+  const rows = [];
+  for (const g of GROUP_ORDER.concat([...new Set(Object.values(groupOf))].filter((x) => !GROUP_ORDER.includes(x)))) {
+    const items = ok.filter((r) => groupOf[r.tv] === g);
+    if (!items.length) continue;
+    const b = items.filter((r) => r.regime === 'BUY'), sl = items.filter((r) => r.regime === 'SELL');
+    const cells = b.concat(sl);
+    const lines = [];
+    for (let i = 0; i < cells.length; i += 7) lines.push('<tr>' + cells.slice(i, i + 7).map(chip).join('\n') + '</tr>');
+    rows.push(`<tr><td style="padding:10px 10px 4px 0;vertical-align:top;font:600 13px -apple-system,Helvetica,Arial;color:#222;white-space:nowrap">${esc(g)}<br><span style="font-weight:400;color:#666">${b.length}/${items.length} BUY</span></td>` +
+      `<td style="padding-top:6px"><table cellspacing="3" cellpadding="0">\n${lines.join('\n')}\n</table></td></tr>`);
+  }
+  const when = et(Date.now(), { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const changeHtml = changes.length
+    ? changes.map((c) => `<li>${esc(et(c.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · <b>${esc(c.name)}</b> → <span style="color:${c.to === 'BUY' ? '#089981' : '#f23645'};font-weight:600">${c.to}</span> <span style="color:#888">${esc(c.score)}</span></li>`).join('\n')
+    : '<li style="color:#888">none</li>';
+  const html = `<div style="font:14px -apple-system,Helvetica,Arial;color:#222;max-width:760px">
+<h2 style="margin:0 0 4px">Flip matrix · ${esc(when)} ET</h2>
+<div style="font-size:15px;margin-bottom:12px"><b style="color:#089981">${buys} BUY</b> / <b style="color:#f23645">${ok.length - buys} SELL</b> of ${ok.length} · ${Math.round(100 * (ok.length - buys) / (ok.length || 1))}% SELL${last.buys != null ? ` · last report ${last.buys} BUY / ${last.sells} SELL` : ''}</div>
+<table cellspacing="0" cellpadding="0">
+${rows.join('\n')}
+</table>
+<h3 style="margin:18px 0 4px">Flips since last report (${changes.length})</h3>
+<ul style="margin:0;padding-left:18px">
+${changeHtml}
+</ul>
+<p style="color:#666;font-size:12px;margin-top:16px">SuperTrend 3/10 on closed 30m bars. Orange outline = flipped since last report. A time after a ticker = its last closed bar is older than 90 min (market closed or a lagging feed).${bad.length ? '<br><b style="color:#f23645">No data:</b> ' + esc(bad.map((r) => r.name + ' (' + r.error + ')').join(', ')) : ''}<br>Flip alerts email ${CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE + STRONG'} · Headless Flip Watcher · not trading advice.</p>
+</div>`;
+  const subject = `📊 Flip matrix ${et(Date.now(), { hour: 'numeric', minute: '2-digit' })} · ${buys} BUY / ${ok.length - buys} SELL` + (changes.length ? ` · ${changes.length} flip${changes.length > 1 ? 's' : ''}` : '');
+  if (!send) { fs.writeFileSync(path.join(DIR, 'headless-matrix-preview.html'), html); console.log(subject + '\npreview -> headless-matrix-preview.html'); return; }
+  mail(subject, html, true);
+  fs.writeFileSync(MATRIX_FILE, JSON.stringify({ sentAt: new Date().toISOString(), buys, sells: ok.length - buys }, null, 1));
+  log(`MATRIX sent: ${buys} BUY / ${ok.length - buys} SELL · ${changes.length} flips since last`);
 }
 
 async function status() {
@@ -318,5 +383,5 @@ function compare(hours, headFile = ALERTS) {
 }
 
 const arg = process.argv[2];
-(arg === '--status' ? status() : arg === '--replay' ? replay(+process.argv[3] || 72) : arg === '--compare' ? Promise.resolve(compare(+process.argv[3] || 48)) : run())
+(arg === '--matrix' ? matrix(true) : arg === '--matrix-preview' ? matrix(false) : arg === '--status' ? status() : arg === '--replay' ? replay(+process.argv[3] || 72) : arg === '--compare' ? Promise.resolve(compare(+process.argv[3] || 48)) : run())
   .catch((e) => { log('FATAL ' + (e.stack || e.message)); process.exit(1); });

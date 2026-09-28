@@ -8,157 +8,182 @@
   {
    "tv": "BATS:SPCX",
    "source": "yahoo",
-   "ticker": "SPCX"
+   "ticker": "SPCX",
+   "group": "your picks"
   },
   {
    "tv": "BATS:PLTR",
    "source": "yahoo",
-   "ticker": "PLTR"
+   "ticker": "PLTR",
+   "group": "your picks"
   },
   {
    "tv": "BATS:SOXL",
    "source": "yahoo",
-   "ticker": "SOXL"
+   "ticker": "SOXL",
+   "group": "leveraged ETFs"
   },
   {
    "tv": "BATS:TQQQ",
    "source": "yahoo",
-   "ticker": "TQQQ"
+   "ticker": "TQQQ",
+   "group": "leveraged ETFs"
   },
   {
    "tv": "BATS:SQQQ",
    "source": "yahoo",
-   "ticker": "SQQQ"
+   "ticker": "SQQQ",
+   "group": "leveraged ETFs"
   },
   {
    "tv": "BATS:MU",
    "source": "yahoo",
-   "ticker": "MU"
+   "ticker": "MU",
+   "group": "your picks"
   },
   {
    "tv": "BATS:MSTR",
    "source": "yahoo",
-   "ticker": "MSTR"
+   "ticker": "MSTR",
+   "group": "your picks"
   },
   {
    "tv": "BATS:NBIS",
    "source": "yahoo",
-   "ticker": "NBIS"
+   "ticker": "NBIS",
+   "group": "your picks"
   },
   {
    "tv": "COINBASE:SOLUSD",
    "source": "coinbase",
-   "ticker": "SOL-USD"
+   "ticker": "SOL-USD",
+   "group": "crypto"
   },
   {
    "tv": "CME_MINI_DL:MNQ1!",
    "source": "yahoo",
-   "ticker": "MNQ=F"
+   "ticker": "MNQ=F",
+   "group": "futures"
   },
   {
    "tv": "COMEX_MINI_DL:MGCV2026",
    "source": "yahoo",
-   "ticker": "MGC=F"
+   "ticker": "MGC=F",
+   "group": "futures"
   },
   {
    "tv": "CME_MINI_DL:MES1!",
    "source": "yahoo",
-   "ticker": "MES=F"
+   "ticker": "MES=F",
+   "group": "futures"
   },
   {
    "tv": "NYMEX_DL:MCL1!",
    "source": "yahoo",
-   "ticker": "MCL=F"
+   "ticker": "MCL=F",
+   "group": "futures"
   },
   {
    "tv": "CBOT_MINI_DL:MYM1!",
    "source": "yahoo",
-   "ticker": "MYM=F"
+   "ticker": "MYM=F",
+   "group": "futures"
   },
   {
    "tv": "COINBASE:XRPUSD",
    "source": "coinbase",
-   "ticker": "XRP-USD"
+   "ticker": "XRP-USD",
+   "group": "crypto"
   },
   {
    "tv": "BITSTAMP:BTCUSD",
    "source": "bitstamp",
-   "ticker": "btcusd"
+   "ticker": "btcusd",
+   "group": "crypto"
   },
   {
    "tv": "COINBASE:ETHUSD",
    "source": "coinbase",
-   "ticker": "ETH-USD"
+   "ticker": "ETH-USD",
+   "group": "crypto"
   },
   {
    "tv": "BINANCE:BNBUSDT",
    "source": "binance",
-   "ticker": "BNBUSDT"
+   "ticker": "BNBUSDT",
+   "group": "crypto"
   },
   {
    "tv": "COINBASE:HYPEUSD",
    "source": "coinbase",
-   "ticker": "HYPE-USD"
+   "ticker": "HYPE-USD",
+   "group": "crypto"
   },
   {
    "tv": "KRAKEN:ADAUSD",
    "source": "kraken",
-   "ticker": "ADAUSD"
+   "ticker": "ADAUSD",
+   "group": "crypto"
   },
   {
    "tv": "COINBASE:ZECUSD",
    "source": "coinbase",
-   "ticker": "ZEC-USD"
+   "ticker": "ZEC-USD",
+   "group": "crypto"
   },
   {
    "tv": "COINBASE:NEARUSD",
    "source": "coinbase",
-   "ticker": "NEAR-USD"
+   "ticker": "NEAR-USD",
+   "group": "crypto"
   },
   {
    "tv": "COINBASE:LINKUSD",
    "source": "coinbase",
-   "ticker": "LINK-USD"
+   "ticker": "LINK-USD",
+   "group": "crypto"
   },
   {
    "tv": "BATS:HOOD",
    "source": "yahoo",
-   "ticker": "HOOD"
+   "ticker": "HOOD",
+   "group": "your picks"
   },
   {
    "tv": "BATS:ORCL",
    "source": "yahoo",
-   "ticker": "ORCL"
+   "ticker": "ORCL",
+   "group": "your picks"
   },
   {
    "tv": "US:NVDA",
    "source": "yahoo",
    "ticker": "NVDA",
-   "group": "requested"
+   "group": "your picks"
   },
   {
    "tv": "US:AMD",
    "source": "yahoo",
    "ticker": "AMD",
-   "group": "requested"
+   "group": "your picks"
   },
   {
    "tv": "US:COIN",
    "source": "yahoo",
    "ticker": "COIN",
-   "group": "requested"
+   "group": "your picks"
   },
   {
    "tv": "US:SPY",
    "source": "yahoo",
    "ticker": "SPY",
-   "group": "requested"
+   "group": "your picks"
   },
   {
    "tv": "US:QQQ",
    "source": "yahoo",
    "ticker": "QQQ",
-   "group": "requested"
+   "group": "your picks"
   },
   {
    "tv": "US:AAPL",
