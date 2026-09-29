@@ -42,7 +42,7 @@ function makeTicket(lid, { name, tv, side, price, stop, target }) {
   else t.qty = 1;
   return t;
 }
-const ticketLine = (t) => `  🎫 ${t.id}: ${t.side} ${t.qty ? t.qty + (t.account.startsWith('futures') ? ' contract' : ' sh') : '$' + t.notionalUsd} ${t.sym} limit ~${t.entry}, stop ${t.stop}, target ${t.target} (risk ≈ $${t.riskUsd}) · ${t.account} · say "place ticket ${t.id}" to review`;
+const ticketLine = (t) => `  🎫 ${t.id}: ${t.side} ${t.qty ? t.qty + (t.account.startsWith('futures') ? ' contract' : ' sh') : '$' + t.notionalUsd} ${t.sym} limit ~${t.entry}, stop ${t.stop}, target ${t.target} (risk ≈ $${t.riskUsd}) · ${t.account} · you place it yourself; say "check ticket ${t.id}" for live quotes`;
 const TF_MS = TF_MIN * 60 * 1000;
 
 const log = (msg) => {
