@@ -353,7 +353,9 @@ async function run() {
   for (const f of fvgs.filter((x) => x.kind === 'gap' || x.rally)) fs.appendFileSync(path.join(DIR, 'fvg-alerts.tsv'), `${new Date().toISOString()}\t${f.name}\t${f.fvg.side}\t${f.fvg.bottom}\t${f.fvg.top}\t${f.fvg.size.toFixed(2)}\tbar ${new Date(f.barTime).toISOString()}\t${(f.fvg.side === 'BULL') === (f.regime === 'BUY') ? 'star' : ''}\t${f.volx.toFixed(2)}\t${f.rally ? 'rally' : ''}\t${f.tf}m\n`);
   for (const f of tradable) f.star = (f.fvg.side === 'BULL') === (f.regime === 'BUY');   // ⭐ gap with the trend
   // Ledger: every rally and every 1h gap is recorded (non-futures bull gaps too, as 'gap:bull').
-  for (const f of fvgs.filter((x) => x.kind === 'gap' || x.rally)) {
+  // Bearish non-futures gaps aren't tradable long-only and aren't logged (they were being recorded as
+  // 'gap:bull' shorts, contaminating that evidence; removed 2026-09-29).
+  for (const f of fvgs.filter((x) => (x.kind === 'gap' || x.rally) && (x.fvg.side === 'BULL' || assetOf(x.tv) === 'future'))) {
     f.asset = assetOf(f.tv); const d = f.fvg.side === 'BULL' ? 1 : -1;
     f.side = d > 0 ? 'long' : 'short'; f.stop = f.price - d * f.atr; f.target = f.price + 2 * d * f.atr;
     f.lkind = f.rally ? 'rally' : f.asset === 'future' ? 'gap:futures' : 'gap:bull';
