@@ -292,7 +292,7 @@ async function biasLab() {
   }
 }
 
-module.exports = { bias, frameSignals, buildUniverse };
+module.exports = { bias, frameSignals, buildUniverse, email };
 if (require.main === module) {
   const a = process.argv[2];
   (a === '--universe' ? buildUniverse().then(() => {}) : a === '--backfill' ? backfill() : a === '--bias-lab' ? biasLab() : scan())
