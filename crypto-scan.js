@@ -220,7 +220,7 @@ function email(xs) {
   const subject = `🪙 Crypto ${et(Math.max(...xs.map((x) => x.t)))}: ` + xs.map((x) => `${x.s.name} ${x.kind === 'rally' ? '🚀' : x.kind.startsWith('flip') ? '⬆️' : '🟩'}`).join(', ');
   const body = xs.map((x) => `${label(x.kind)}  ${x.s.name}${x.s.onchain ? ` (${x.s.onchain} onchain)` : ''} · price ${x.bar.c.toPrecision(6)}` +
     (x.volx ? ` · ${x.volx.toFixed(1)}× volume` : '') + (x.bias ? ` · bias ${x.bias.score >= 0 ? '+' : ''}${x.bias.score} (${x.bias.label})` : '') +
-    `\n  🎫 ${x.ticket.id}: BUY $${x.ticket.notionalUsd} of ${x.s.name}, stop ${x.ticket.stop}, target ${x.ticket.target} (risk ≈ $${x.ticket.riskUsd}) · ${x.ticket.account} · say "place ticket ${x.ticket.id}" to review` +
+    `\n  🎫 ${x.ticket.id}: BUY $${x.ticket.notionalUsd} of ${x.s.name}, stop ${x.ticket.stop}, target ${x.ticket.target} (risk ≈ $${x.ticket.riskUsd}) · ${x.ticket.account} · you place it yourself; say "check ticket ${x.ticket.id}" for live quotes` +
     `\n  evidence: ${Math.round(100 * x.evidence.win)}% net win vs ${Math.round(100 * (x.evidence.baseline || 0))}% random (n=${x.evidence.n}, ${x.evidence.days} days)`).join('\n\n') +
     '\n\nOnly signal types the trade-core ledger has proven (after costs, vs random entry) are emailed; everything else is in the 08:55 / 16:30 briefs.\nNot advice.\n— Crypto scanner';
   H.mail(subject, body);
