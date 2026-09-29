@@ -24,3 +24,5 @@ headless-matrix-preview.html
 fvg-alerts.tsv
 headless-stats.json
 headless-stats-*m.json
+crypto-state.json
+crypto-scan.log

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key><string>com.dhruv.cryptoscan</string>
+	<key>ProcessType</key><string>Background</string>
+	<key>ProgramArguments</key>
+	<array><string>/Users/dhruvpatel/.local/bin/node</string><string>/Users/dhruvpatel/flip-notifier/crypto-scan.js</string></array>
+	<key>WorkingDirectory</key><string>/Users/dhruvpatel/flip-notifier</string>
+	<key>StartCalendarInterval</key>
+	<array><dict><key>Minute</key><integer>6</integer></dict><dict><key>Minute</key><integer>21</integer></dict><dict><key>Minute</key><integer>36</integer></dict><dict><key>Minute</key><integer>51</integer></dict></array>
+	<key>StandardOutPath</key><string>/Users/dhruvpatel/flip-notifier/cryptoscan-launchd.out.log</string>
+	<key>StandardErrorPath</key><string>/Users/dhruvpatel/flip-notifier/cryptoscan-launchd.err.log</string>
+</dict>
+</plist>
