@@ -145,6 +145,17 @@ function frameSignals(b15, i15) {
     if (kind === 'rally' && volx < rallyX) continue;
     out.push({ kind, tf, bar: f[k], atr: atr[k], volx, size: g.size });
   }
+  // Daily public-strategy signals (2026-09-29, user: implement the best-rated strategy ideas). Tested on 30
+  // coins x ~3 years net of costs (market-lab/research/crypto_daily_rules.py): 20-day breakout +0.11%/day in
+  // both halves, 4 red days +0.11% (older half negative). Long-only, judged over 24h, SILENT until proven.
+  if ((b[n - 1].t + TF) % 86400000 === 0) {
+    const d = H.agg(b, 1440);
+    if (d.length >= 22) {
+      const k = d.length - 1, atr = H.atrSeries(d), red = (j) => d[j].c < d[j].o;
+      if (d[k].c > Math.max(...d.slice(k - 20, k).map((x) => x.h))) out.push({ kind: 'strat:breakout20', tf: 1440, bar: d[k], atr: atr[k] });
+      if ([0, 1, 2, 3].every((j) => red(k - j))) out.push({ kind: 'strat:reds4', tf: 1440, bar: d[k], atr: atr[k] });
+    }
+  }
   return out;
 }
 
@@ -197,7 +208,7 @@ async function scan() {
   // ledger + gating + tickets
   const mailed = [];
   for (const x of signals) {
-    const price = x.bar.c, stop = price - x.atr, target = price + 2 * x.atr, asset = assetOf(x.s);
+    const price = x.bar.c, shadow = x.kind.startsWith('strat:'), stop = shadow ? null : price - x.atr, target = shadow ? null : price + 2 * x.atr, asset = assetOf(x.s);
     x.lid = ledger.add({ product: 'crypto', kind: x.kind, sym: x.s.tv, asset, tf: x.tf, side: 'long', t: x.t, price, stop, target, atr: x.atr,
                          meta: { volx: x.volx, size: x.size, score: x.score, bias: x.bias && x.bias.score, venues: x.s.venues } });
     x.evidence = ledger.isProven('crypto', x.kind, ledger.regimeAt(asset, x.t));
@@ -264,8 +275,9 @@ async function backfill() {
     for (let i = 400; i < b.length; i++) for (const sig of frameSignals(b, i)) {
       if (sig.kind === 'flip') continue;
       const t = sig.bar.t + sig.tf * 60000; if (seen[sig.kind] === t) continue; seen[sig.kind] = t;
-      ledger.add({ product: 'crypto', kind: sig.kind, sym: s.tv, asset: assetOf(s), tf: sig.tf, side: 'long', t, price: sig.bar.c, stop: sig.bar.c - sig.atr,
-                   target: sig.bar.c + 2 * sig.atr, atr: sig.atr, meta: { volx: sig.volx, size: sig.size, replay: true }, source: 'backfill' }); n++;
+      const sh = sig.kind.startsWith('strat:');
+      ledger.add({ product: 'crypto', kind: sig.kind, sym: s.tv, asset: assetOf(s), tf: sig.tf, side: 'long', t, price: sig.bar.c, stop: sh ? null : sig.bar.c - sig.atr,
+                   target: sh ? null : sig.bar.c + 2 * sig.atr, atr: sig.atr, meta: { volx: sig.volx, size: sig.size, replay: true }, source: 'backfill' }); n++;
     }
   }
   const g = ledger.grade(), ev = ledger.evidence();
