@@ -499,7 +499,7 @@ async function matrix(send) {
     briefHtml += `<h3 style="margin:18px 0 4px">Evidence: which signals earn a real-time email (last ${ev.windowDays} days, after costs)</h3>
 <table cellspacing="0" style="font-size:13px;border-collapse:collapse"><tr><th style="text-align:left;padding:2px 8px">signal</th><th style="padding:2px 8px">n</th><th style="padding:2px 8px">net win</th><th style="padding:2px 8px">random</th><th style="padding:2px 8px">mean net</th><th></th></tr>
 ${evRows}
-</table><div style="color:#666;font-size:12px">Proven = ≥ ${ev.minN} graded signals over ≥ ${ev.minDays || 10} separate days, and the win rate's lower bound above random entry for the same assets (Kalshi: above price + fee). Everything else waits for these briefs.</div>`;
+</table><div style="color:#666;font-size:12px">Proven = ≥ ${ev.minN} graded signals over ≥ ${ev.minDays || 10} separate days, the win rate's lower bound above random entry for the same assets (Kalshi: above price + fee), and average net return still positive after subtracting one standard error. A market-condition slice only overrides the overall record with ≥ ${ev.regimeMinN || 60} signals. Everything else waits for these briefs.</div>`;
     // Today's market-iv ACT spreads (each sector), from the ledger: what was actionable, with its ticket.
     const dayStart = new Date(new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York' })).getTime();
     const spreads = ledger.open().prepare(`SELECT kind, sym, price, meta, ticket FROM signals WHERE product='market-iv' AND t >= ? ORDER BY kind`).all(dayStart);
