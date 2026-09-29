@@ -1,0 +1,1499 @@
+{
+ "updated": "2026-09-29T12:23:01.857Z",
+ "counts": {
+  "robinhood": 88,
+  "coinbase": 96,
+  "wallet": 0,
+  "total": 102
+ },
+ "symbols": [
+  {
+   "tv": "CRYPTO:AAVE",
+   "name": "AAVE",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "AAVE-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 14672631,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:ADA",
+   "name": "ADA",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ADA-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 22169666,
+   "signals": false
+  },
+  {
+   "tv": "CRYPTO:AERO",
+   "name": "AERO",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "AERO-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 10858551,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:ALGO",
+   "name": "ALGO",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ALGO-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 9499323,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:ARB",
+   "name": "ARB",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ARB-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 9532629,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:ASTER",
+   "name": "ASTER",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ASTER-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 904199,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:ATOM",
+   "name": "ATOM",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ATOM-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 1428192,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:AVAX",
+   "name": "AVAX",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "AVAX-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 34798537,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:AVNT",
+   "name": "AVNT",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "AVNT-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 478886,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:AXS",
+   "name": "AXS",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "AXS-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 186511,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:BAT",
+   "name": "BAT",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "BAT-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 254947,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:BCH",
+   "name": "BCH",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "BCH-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 5269291,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:BILL",
+   "name": "BILL",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "BILL-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 570655,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:BIO",
+   "name": "BIO",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "BIO-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 202295,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:BNB",
+   "name": "BNB",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "BNB-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 2539944,
+   "signals": false
+  },
+  {
+   "tv": "CRYPTO:BONK",
+   "name": "BONK",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "BONK-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 2449206,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:BTC",
+   "name": "BTC",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "BTC-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 474521464,
+   "signals": false
+  },
+  {
+   "tv": "CRYPTO:CASHCAT",
+   "name": "CASHCAT",
+   "group": "crypto",
+   "source": "binance",
+   "ticker": "CASHCATUSDT",
+   "venues": {
+    "robinhood": true,
+    "coinbase": false,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": null,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:CC",
+   "name": "CC",
+   "group": "crypto",
+   "source": "binance",
+   "ticker": "CCUSDT",
+   "venues": {
+    "robinhood": true,
+    "coinbase": false,
+    "haltedIn": []
+   },
+   "usdVol24h": null,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:CHIP",
+   "name": "CHIP",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "CHIP-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 211985,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:COMP",
+   "name": "COMP",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "COMP-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 419101,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:CRO",
+   "name": "CRO",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "CRO-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 3305631,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:CRV",
+   "name": "CRV",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "CRV-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 7399455,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:DASH",
+   "name": "DASH",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "DASH-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 4018740,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:DOGE",
+   "name": "DOGE",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "DOGE-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 17217951,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:DOT",
+   "name": "DOT",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "DOT-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 4231346,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:DRV",
+   "name": "DRV",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "DRV-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 2215027,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:EIGEN",
+   "name": "EIGEN",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "EIGEN-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 495871,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:ENA",
+   "name": "ENA",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ENA-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 10438580,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:ETC",
+   "name": "ETC",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ETC-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 867889,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:ETH",
+   "name": "ETH",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ETH-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 304016750,
+   "signals": false
+  },
+  {
+   "tv": "CRYPTO:FARTCOIN",
+   "name": "FARTCOIN",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "FARTCOIN-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 3899755,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:FET",
+   "name": "FET",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "FET-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 7551131,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:FIL",
+   "name": "FIL",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "FIL-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 2730784,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:FLOKI",
+   "name": "FLOKI",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "FLOKI-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 160573,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:FLR",
+   "name": "FLR",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "FLR-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 987733,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:GRAM",
+   "name": "GRAM",
+   "group": "crypto",
+   "source": "binance",
+   "ticker": "GRAMUSDT",
+   "venues": {
+    "robinhood": true,
+    "coinbase": false,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": null,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:GRT",
+   "name": "GRT",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "GRT-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 1709463,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:HBAR",
+   "name": "HBAR",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "HBAR-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 93831958,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:HYPE",
+   "name": "HYPE",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "HYPE-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 29935661,
+   "signals": false
+  },
+  {
+   "tv": "CRYPTO:ICP",
+   "name": "ICP",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ICP-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 8373214,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:IMX",
+   "name": "IMX",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "IMX-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 344384,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:INJ",
+   "name": "INJ",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "INJ-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 4216447,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:JTO",
+   "name": "JTO",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "JTO-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 1050647,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:KAIO",
+   "name": "KAIO",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "KAIO-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 2115105,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:LDO",
+   "name": "LDO",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "LDO-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 1273650,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:LIGHTER",
+   "name": "LIGHTER",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "LIGHTER-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 5720347,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:LINK",
+   "name": "LINK",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "LINK-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 80489241,
+   "signals": false
+  },
+  {
+   "tv": "CRYPTO:LIT",
+   "name": "LIT",
+   "group": "crypto",
+   "source": "binance",
+   "ticker": "LITUSDT",
+   "venues": {
+    "robinhood": true,
+    "coinbase": false,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": null,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:LTC",
+   "name": "LTC",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "LTC-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 14580125,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:MEGA",
+   "name": "MEGA",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "MEGA-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 605687,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:MEW",
+   "name": "MEW",
+   "group": "crypto",
+   "source": "binance",
+   "ticker": "MEWUSDT",
+   "venues": {
+    "robinhood": true,
+    "coinbase": false,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": null,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:MNT",
+   "name": "MNT",
+   "group": "crypto",
+   "source": "binance",
+   "ticker": "MNTUSDT",
+   "venues": {
+    "robinhood": true,
+    "coinbase": false,
+    "haltedIn": []
+   },
+   "usdVol24h": null,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:MON",
+   "name": "MON",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "MON-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 6008410,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:MOODENG",
+   "name": "MOODENG",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "MOODENG-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 140170,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:MORPHO",
+   "name": "MORPHO",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "MORPHO-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 1363506,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:NEAR",
+   "name": "NEAR",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "NEAR-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 63211864,
+   "signals": false
+  },
+  {
+   "tv": "CRYPTO:NMR",
+   "name": "NMR",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "NMR-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 7265462,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:ONDO",
+   "name": "ONDO",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ONDO-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 28972668,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:OP",
+   "name": "OP",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "OP-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 717272,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:ORCA",
+   "name": "ORCA",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ORCA-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 897570,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:PAXG",
+   "name": "PAXG",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "PAXG-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 1570119,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:PENGU",
+   "name": "PENGU",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "PENGU-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 6618143,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:PEPE",
+   "name": "PEPE",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "PEPE-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 4006460,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:PNUT",
+   "name": "PNUT",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "PNUT-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 99640,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:POPCAT",
+   "name": "POPCAT",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "POPCAT-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 177483,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:PUMP",
+   "name": "PUMP",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "PUMP-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 22419214,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:PYTH",
+   "name": "PYTH",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "PYTH-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 2055741,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:QNT",
+   "name": "QNT",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "QNT-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 144795101,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:RAY",
+   "name": "RAY",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "RAY-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 2556552,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:RE",
+   "name": "RE",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "RE-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 511244,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:RENDER",
+   "name": "RENDER",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "RENDER-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 4167580,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:SEI",
+   "name": "SEI",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "SEI-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 4945989,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:SENT",
+   "name": "SENT",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "SENT-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 335605,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:SHIB",
+   "name": "SHIB",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "SHIB-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 1034296,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:SKR",
+   "name": "SKR",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "SKR-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 392679,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:SKY",
+   "name": "SKY",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "SKY-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 1204290,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:SNX",
+   "name": "SNX",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "SNX-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 244152,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:SOL",
+   "name": "SOL",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "SOL-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 88924648,
+   "signals": false
+  },
+  {
+   "tv": "CRYPTO:STRK",
+   "name": "STRK",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "STRK-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 777357,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:SUI",
+   "name": "SUI",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "SUI-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 42654789,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:SYRUP",
+   "name": "SYRUP",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "SYRUP-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 3088847,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:TAO",
+   "name": "TAO",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "TAO-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 15513492,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:TON",
+   "name": "TON",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "TON-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 2757608,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:TRUMP",
+   "name": "TRUMP",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "TRUMP-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 2491425,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:UNI",
+   "name": "UNI",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "UNI-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 24913462,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:USELESS",
+   "name": "USELESS",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "USELESS-USD",
+   "venues": {
+    "robinhood": false,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 9693762,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:VIRTUAL",
+   "name": "VIRTUAL",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "VIRTUAL-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 1080752,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:VVV",
+   "name": "VVV",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "VVV-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 9952905,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:W",
+   "name": "W",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "W-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 332023,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:WIF",
+   "name": "WIF",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "WIF-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 1040542,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:WLD",
+   "name": "WLD",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "WLD-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 6900152,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:WLFI",
+   "name": "WLFI",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "WLFI-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 563869,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:XCN",
+   "name": "XCN",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "XCN-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 1067986,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:XLM",
+   "name": "XLM",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "XLM-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 44665104,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:XPL",
+   "name": "XPL",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "XPL-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 3338825,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:XRP",
+   "name": "XRP",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "XRP-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 186298817,
+   "signals": false
+  },
+  {
+   "tv": "CRYPTO:XTZ",
+   "name": "XTZ",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "XTZ-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 421392,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:ZEC",
+   "name": "ZEC",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ZEC-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 214733936,
+   "signals": false
+  },
+  {
+   "tv": "CRYPTO:ZORA",
+   "name": "ZORA",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ZORA-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 762712,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:ZRO",
+   "name": "ZRO",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ZRO-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": [
+     "NY"
+    ]
+   },
+   "usdVol24h": 2501931,
+   "signals": true
+  },
+  {
+   "tv": "CRYPTO:ZRX",
+   "name": "ZRX",
+   "group": "crypto",
+   "source": "coinbase",
+   "ticker": "ZRX-USD",
+   "venues": {
+    "robinhood": true,
+    "coinbase": true,
+    "haltedIn": []
+   },
+   "usdVol24h": 75058,
+   "signals": true
+  }
+ ]
+}

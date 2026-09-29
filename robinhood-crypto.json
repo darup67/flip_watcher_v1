@@ -1,0 +1,432 @@
+{
+ "updated": "2026-09-29T08:19:21",
+ "source": "Robinhood MCP get_currency_pairs: tradable, not display-only; coins halted only in some states are kept with halted_regions",
+ "_refresh": "Refreshed monthly by the Claude scheduled task 'robinhood-crypto-refresh' (the MCP is only reachable from Claude sessions).",
+ "coins": {
+  "BILL": {
+   "name": "Billions Network to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "CASHCAT": {
+   "name": "Cash Cat to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "RE": {
+   "name": "RE to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "FLR": {
+   "name": "Flare  to US Dollar",
+   "halted_regions": []
+  },
+  "CHIP": {
+   "name": "USD.AI to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "CC": {
+   "name": "Canton to USD",
+   "halted_regions": []
+  },
+  "SENT": {
+   "name": "Sentient to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "USDG": {
+   "name": "Global Dollar to US Dollar",
+   "halted_regions": [
+    "NY",
+    "TX"
+   ]
+  },
+  "MEGA": {
+   "name": "MegaETH to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "SKR": {
+   "name": "Seeker to US Dollar",
+   "halted_regions": []
+  },
+  "LIT": {
+   "name": "Lighter to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "SYRUP": {
+   "name": "Syrup Token to US Dollar",
+   "halted_regions": []
+  },
+  "AVNT": {
+   "name": "Avantis to USD",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "HYPE": {
+   "name": "Hyperliquid to USD",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "XPL": {
+   "name": "Plasma to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "ASTER": {
+   "name": "Aster to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "SEI": {
+   "name": "Sei to US Dollar",
+   "halted_regions": []
+  },
+  "ZORA": {
+   "name": "Zora to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "WLFI": {
+   "name": "World Liberty Financial to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "XCN": {
+   "name": "Onyxcoin to US Dollar",
+   "halted_regions": []
+  },
+  "SKY": {
+   "name": "Sky to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "SUI": {
+   "name": "Sui to US dollar",
+   "halted_regions": []
+  },
+  "MOODENG": {
+   "name": "Moo Deng to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "VVV": {
+   "name": "Venice Token to US Dollar",
+   "halted_regions": []
+  },
+  "ORCA": {
+   "name": "Orca to US Dollar",
+   "halted_regions": []
+  },
+  "MNT": {
+   "name": "Mantle to US Dollar",
+   "halted_regions": []
+  },
+  "PNUT": {
+   "name": "Peanut the Squirrel to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "MEW": {
+   "name": "cat in a dogs world to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "BIO": {
+   "name": "Bio Protocol to US Dollar",
+   "halted_regions": []
+  },
+  "POPCAT": {
+   "name": "Popcat to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "SNX": {
+   "name": "Synthetix to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "W": {
+   "name": "Wormhole Token to US Dollar",
+   "halted_regions": []
+  },
+  "EIGEN": {
+   "name": "Eigenlayer to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "MORPHO": {
+   "name": "Morpho Network to US Dollar",
+   "halted_regions": []
+  },
+  "JTO": {
+   "name": "Jito Network to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "AERO": {
+   "name": "Aerodrome Finance to US Dollar",
+   "halted_regions": []
+  },
+  "STRK": {
+   "name": "Starknet Token to US Dollar",
+   "halted_regions": []
+  },
+  "PYTH": {
+   "name": "Pyth Network to US Dollar",
+   "halted_regions": []
+  },
+  "FLOKI": {
+   "name": "Floki Inu to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "PENGU": {
+   "name": "Pudgy Penguins to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "QNT": {
+   "name": "Quant to US Dollar",
+   "halted_regions": []
+  },
+  "LDO": {
+   "name": "LidoDAO to US Dollar",
+   "halted_regions": []
+  },
+  "INJ": {
+   "name": "Injective to US Dollar",
+   "halted_regions": []
+  },
+  "WLD": {
+   "name": "Worldcoin to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "IMX": {
+   "name": "ImmutableX to US Dollar",
+   "halted_regions": []
+  },
+  "RAY": {
+   "name": "Raydium to US Dollar",
+   "halted_regions": []
+  },
+  "VIRTUAL": {
+   "name": "Virtual Protocol to US Dollar",
+   "halted_regions": []
+  },
+  "ENA": {
+   "name": "Ethena to US Dollar",
+   "halted_regions": []
+  },
+  "FET": {
+   "name": "Artificial Superintelligence to US Dollar",
+   "halted_regions": []
+  },
+  "ONDO": {
+   "name": "Ondo to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "TRUMP": {
+   "name": "OFFICIAL TRUMP to USD",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "BONK": {
+   "name": "Bonk to US Dollar",
+   "halted_regions": []
+  },
+  "OP": {
+   "name": "Optimism to US Dollar",
+   "halted_regions": []
+  },
+  "ARB": {
+   "name": "Arbitrum to US Dollar",
+   "halted_regions": []
+  },
+  "GRAM": {
+   "name": "GRAM to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "WIF": {
+   "name": "dogwifhat to US Dollar",
+   "halted_regions": []
+  },
+  "RENDER": {
+   "name": "Render to US Dollar",
+   "halted_regions": []
+  },
+  "ZRO": {
+   "name": "LayerZero to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "PEPE": {
+   "name": "Pepe to US Dollar",
+   "halted_regions": []
+  },
+  "AXS": {
+   "name": "Axie Infinity to US Dollar",
+   "halted_regions": []
+  },
+  "XTZ": {
+   "name": "Tezos to US Dollar",
+   "halted_regions": []
+  },
+  "AAVE": {
+   "name": "Aave to US Dollar",
+   "halted_regions": []
+  },
+  "GRT": {
+   "name": "The Graph to US Dollar",
+   "halted_regions": []
+  },
+  "PAXG": {
+   "name": "Pax Gold to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "CRV": {
+   "name": "Curve to US Dollar",
+   "halted_regions": []
+  },
+  "ZRX": {
+   "name": "0x to US Dollar",
+   "halted_regions": []
+  },
+  "BAT": {
+   "name": "Basic Attention Token to US Dollar",
+   "halted_regions": []
+  },
+  "HBAR": {
+   "name": "Hedera to US Dollar",
+   "halted_regions": []
+  },
+  "ALGO": {
+   "name": "Algorand to US Dollar",
+   "halted_regions": []
+  },
+  "UNI": {
+   "name": "Uniswap to US Dollar",
+   "halted_regions": []
+  },
+  "LINK": {
+   "name": "Chainlink to US Dollar",
+   "halted_regions": []
+  },
+  "COMP": {
+   "name": "Compound to US Dollar",
+   "halted_regions": []
+  },
+  "NEAR": {
+   "name": "NEAR Protocol to US Dollar",
+   "halted_regions": []
+  },
+  "ATOM": {
+   "name": "Cosmos to US Dollar",
+   "halted_regions": []
+  },
+  "SHIB": {
+   "name": "Shiba Inu to US Dollar",
+   "halted_regions": []
+  },
+  "DOT": {
+   "name": "Polkadot to US Dollar",
+   "halted_regions": []
+  },
+  "AVAX": {
+   "name": "Avalanche to US Dollar",
+   "halted_regions": []
+  },
+  "SOL": {
+   "name": "Solana to US Dollar",
+   "halted_regions": []
+  },
+  "ADA": {
+   "name": "Cardano to US Dollar",
+   "halted_regions": []
+  },
+  "USDC": {
+   "name": "USD Coin to US Dollar",
+   "halted_regions": [
+    "TX"
+   ]
+  },
+  "BNB": {
+   "name": "BNB to US Dollar",
+   "halted_regions": [
+    "NY"
+   ]
+  },
+  "XLM": {
+   "name": "Stellar Lumens to US Dollar",
+   "halted_regions": []
+  },
+  "ZEC": {
+   "name": "Zcash to US Dollar",
+   "halted_regions": []
+  },
+  "XRP": {
+   "name": "XRP to US Dollar",
+   "halted_regions": []
+  },
+  "LTC": {
+   "name": "Litecoin to US Dollar",
+   "halted_regions": []
+  },
+  "ETC": {
+   "name": "Ethereum Classic to US Dollar",
+   "halted_regions": []
+  },
+  "DOGE": {
+   "name": "Dogecoin to US Dollar",
+   "halted_regions": []
+  },
+  "BCH": {
+   "name": "Bitcoin Cash to US Dollar",
+   "halted_regions": []
+  },
+  "ETH": {
+   "name": "Ethereum to US Dollar",
+   "halted_regions": []
+  },
+  "BTC": {
+   "name": "Bitcoin to US Dollar",
+   "halted_regions": []
+  }
+ }
+}

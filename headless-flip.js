@@ -506,6 +506,18 @@ ${evRows}
         return `<li><b>${esc(x.sym.split(':')[1])}</b> <span style="color:#666">${esc(x.kind.replace('spread:', ''))}</span> · buy ${esc(String(m.exp || '').slice(5))} $${m.long}C / sell $${m.short}C @ $${x.price.toFixed(2)} × ${m.qty} · P(profit) ${Math.round(100 * (m.p_profit || 0))}%${m.event_before_exp ? ' ⚠' : ''}${tk ? ` · 🎫 <b>${esc(tk.id)}</b>` : ''}</li>`; }).join('\n');
       briefHtml += `<h3 style="margin:18px 0 4px">✅ Today's ACT spreads (market-iv, all sectors): ${spreads.length}</h3><ul style="margin:0;padding-left:18px">${sl || '<li style="color:#888">none passed today</li>'}</ul>`;
     }
+    // Crypto scanner (crypto-scan.js): bias board as context + signals held for the brief.
+    const cs = (() => { try { return JSON.parse(fs.readFileSync(path.join(DIR, 'crypto-state.json'), 'utf8')); } catch { return null; } })();
+    if (cs && cs.board) {
+      const chip = (b) => `<span style="display:inline-block;margin:2px;padding:3px 7px;border-radius:4px;color:#fff;font:600 12px -apple-system,Helvetica;background:${b.score >= 15 ? '#089981' : b.score <= -15 ? '#f23645' : '#888'}">${esc(b.name)} ${b.score > 0 ? '+' : ''}${b.score}</span>`;
+      const top = cs.board.slice(0, 12).map(chip).join(''), bottom = cs.board.slice(-8).reverse().map(chip).join('');
+      const csig = ledger.open().prepare(`SELECT kind, sym, t, price, emailed FROM signals WHERE product='crypto' AND source='live' AND t > ? ORDER BY t`).all(since);
+      const cl = csig.map((x) => `<li>${esc(et(x.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · <b>${esc(x.sym.split(':')[1])}</b> ${esc(x.kind)} at ${px(x.price)}${x.emailed ? ' <span style="color:#089981">(emailed)</span>' : ''}</li>`).join('\n');
+      briefHtml += `<h3 style="margin:18px 0 4px">🪙 Crypto: ${cs.counts.ok} coins (Robinhood ${cs.counts.robinhood}, Coinbase ${cs.counts.coinbase}, Wallet ${cs.counts.wallet}) · BTC 24h ${cs.btc24 == null ? '–' : (100 * cs.btc24).toFixed(1) + '%'}</h3>
+<div style="font-size:12px;color:#666">Bias score (−100..+100: SuperTrend 15m/1h/4h, EMA stack, RSI, strength vs BTC, volume). Context only: in testing it did not predict the next 24h (strong-bear coins rose more often, 58% vs 48%).</div>
+<div style="margin:4px 0"><b style="font-size:12px">Highest</b><br>${top}</div><div style="margin:4px 0"><b style="font-size:12px">Lowest</b><br>${bottom}</div>
+<div style="font-size:13px;margin-top:6px"><b>Crypto signals since last brief (${csig.length})</b></div><ul style="margin:0;padding-left:18px">${cl || '<li style="color:#888">none</li>'}</ul>`;
+    }
     const held = ledger.open().prepare(`SELECT kind, sym, side, t, price FROM signals WHERE product='headless' AND source='live' AND emailed=0 AND t > ?
       AND (kind IN ('flip:STRONG','rally','gap:futures')) ORDER BY t`).all(since);
     const hl = held.map((h) => `<li>${esc(et(h.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · <b>${esc(h.sym.split(':')[1])}</b> ${esc(h.kind)} ${h.side === 'long' ? '⬆️' : '⬇️'} at ${px(h.price)}</li>`).join('\n');
@@ -649,7 +661,7 @@ function compare(hours, headFile = ALERTS) {
   if (onlyChart.length) console.log('only chart:\n  ' + onlyChart.map(fmt).join('\n  '));
 }
 
-module.exports = { CFG, TF_MS, DIR, SOURCES, pool, supertrendRegimes, scoreCore, atrSeries, fvgAt, sendFvgEmail, sendEmail, agg, SIG };
+module.exports = { CFG, TF_MS, DIR, SOURCES, pool, supertrendRegimes, scoreCore, atrSeries, fvgAt, sendFvgEmail, sendEmail, mail, agg, SIG };
 
 if (require.main === module) {
 const arg = process.argv[2];

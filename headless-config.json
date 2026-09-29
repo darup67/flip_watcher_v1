@@ -479,5 +479,11 @@
   "riskUsd": 100,
   "_comment": "2026-09-28: suggested size in each order ticket = riskUsd / |entry - stop|. Tickets are never placed automatically; say \"place ticket <id>\" to Claude to get a broker preview you confirm."
  },
- "_gate_comment": "2026-09-28 (user): real-time emails only for signal kinds PROVEN in trade-core's ledger (evidence.json); the rest wait for the 08:55 / 16:30 briefs."
+ "_gate_comment": "2026-09-28 (user): real-time emails only for signal kinds PROVEN in trade-core's ledger (evidence.json); the rest wait for the 08:55 / 16:30 briefs.",
+ "crypto": {
+  "realtimeKinds": [
+   "flip:STRONG"
+  ],
+  "_comment": "2026-09-29: crypto real-time email = PROVEN kinds in this list only. gap:bull is proven too (41% vs 37%) but fires ~25/day, so it goes to the briefs; add 'gap:bull' here to get it live. rally (33% vs 37%) is not proven on crypto."
+ }
 }
