@@ -225,6 +225,17 @@ async function scan() {
       ` · top bias ${board.slice(0, 3).map((b) => `${b.name} ${b.score}`).join(', ')}` + (results.length - ok.length ? ` · failed ${results.filter((r) => r.err).map((r) => r.s.name).slice(0, 8).join(',')}` : ''));
 }
 
+// Social sentiment readings written by ~/coin-launch-agent/sentiment.py (StockTwits crowd tags, news, Reddit, CoinGecko, Telegram).
+function sentiment(sym) {
+  try {
+    const d = JSON.parse(fs.readFileSync(path.join(require('os').homedir(), 'coin-launch-agent', 'data', 'sentiment', 'latest.json'), 'utf8'));
+    const t = d.tokens && d.tokens[sym];
+    if (!t || t.score == null || Date.now() / 1000 - t.t > 3 * 3600) return null;
+    return { ...t, fg: d.fear_greed };
+  } catch (e) { return null; }
+}
+const sentText = (t) => (t ? `${t.label} ${t.score > 0 ? '+' : ''}${t.score}${t.talk ? ' · ' + t.talk : ''}${t.fomo ? ` · FOMO ${t.fomo.index} ${t.fomo.label.toLowerCase()}` : ''} (${t.confidence} confidence: ${t.sources.join(', ')}${t.rel != null ? `, ${t.rel > 0 ? '+' : ''}${t.rel} vs the typical coin` : ''})` : 'no fresh reading');
+
 function email(xs) {
   const UI = require('./email-ui.js');
   const et = (t) => new Date(t).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
@@ -236,6 +247,8 @@ function email(xs) {
     sub: `${label(x.kind)}${x.s.onchain ? ` · ${x.s.onchain} onchain` : ''}${x.volx ? ` · ${x.volx.toFixed(1)}× volume` : ''}${x.bias ? ` · bias ${x.bias.score >= 0 ? '+' : ''}${x.bias.score} (${x.bias.label})` : ''}`,
     fields: [['Price', x.bar.c.toPrecision(6)], ['Action', 'BUY'], ['Size', `$${x.ticket.notionalUsd}`], ['Stop', x.ticket.stop], ['Target', x.ticket.target], ['Risk', `≈ $${x.ticket.riskUsd}`]],
     lines: [`Evidence: ${Math.round(100 * x.evidence.win)}% net win vs ${Math.round(100 * (x.evidence.baseline || 0))}% for random entries (n=${x.evidence.n}, ${x.evidence.days} days).`,
+            `Social sentiment: ${sentText(sentiment(x.s.name))}. It is a reading of what people are saying, not a validated signal.`,
+            ...((sentiment(x.s.name) && sentiment(x.s.name).raw && sentiment(x.s.name).raw.news && sentiment(x.s.name).raw.news.top || []).slice(0, 1).map((h) => `Top headline: ${h}`)),
             `Order ticket ${x.ticket.id} · ${x.ticket.account}. You place it yourself; ask Claude "check ticket ${x.ticket.id}" for live quotes.`] }));
   UI.send(subject, {
     kind: 'Signal alert · Crypto', status: { text: `${xs.length} signal${xs.length > 1 ? 's' : ''}`, tone: 'info' },
