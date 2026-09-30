@@ -398,37 +398,66 @@ function statLine(kind, key) {
 
 function rallyVol() { return (CFG.fvg && CFG.fvg.rallyVolX) || 2.5; }
 
+// Email layout: every email is built from a spec and rendered by email-ui.js (shared by all products).
+const UI = require('./email-ui.js');
+const ticketFields = (t) => [['Action', t.side], ['Size', t.qty ? `${t.qty} ${t.account.startsWith('futures') ? 'contract' : 'sh'}` : `$${t.notionalUsd}`], ['Limit', `~${t.entry}`], ['Stop', t.stop], ['Target', t.target], ['Risk', `≈ $${t.riskUsd}`]];
+const ticketNote = (t) => `Order ticket ${t.id} · ${t.account}. You place it yourself; ask Claude "check ticket ${t.id}" for live quotes.`;
+const evidenceLine = (e) => (e ? `Evidence: ${Math.round(100 * e.win)}% net win vs ${Math.round(100 * (e.baseline || 0))}% for random entries (n=${e.n}${e.scope ? ', ' + e.scope : ''}${e.days ? ', ' + e.days + ' days' : ''}).` : null);
+
 function sendFvgEmail(fvgs) {
   const fmt = (x) => (x >= 1000 ? x.toLocaleString('en-US', { maximumFractionDigits: 0 }) : x.toPrecision(4));
   const closed = new Date(Math.max(...fvgs.map((f) => f.barTime + (f.tf || TF_MIN) * 60000))).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
-  const bull = fvgs.filter((f) => f.fvg.side === 'BULL'), bear = fvgs.filter((f) => f.fvg.side === 'BEAR');
-  const stars = fvgs.filter((f) => f.star).length, rallies = fvgs.filter((f) => f.rally);
-  const fut = fvgs.filter((f) => !f.rally);   // futures gaps (both sides), or plain bull gaps if nonFuturesMode = 'all'
-  const futTxt = fut.length ? `${fut.length} FVG (${fut.map((f) => `${f.name} ${f.fvg.side === 'BULL' ? '🟩' : '🟥'}`).join(', ')})` : '';
-  const subject = rallies.length
-    ? `🚀 Early rally ${closed}: ${rallies.map((f) => f.name).join(', ')}${futTxt ? ' · ' + futTxt : ''}`
-    : `🟩🟥 FVG ${closed}${stars ? ` ⭐${stars}` : ''}: ${futTxt}`;
-  const line = (f) => (f.rally
-    ? `🚀 ${f.name}  EARLY RALLY (${f.tf}m) · bull gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)} on ${f.volx.toFixed(1)}× volume · entry ~${fmt(f.price)}, stop ${fmt(f.price - f.atr)} (−1 ATR), target ${fmt(f.price + 2 * f.atr)} (+2 ATR) · trend ${f.regime}${f.star ? ' ⭐' : ''}`
-    : `${f.star ? '⭐' : '  '}${f.fvg.side === 'BULL' ? '🟩' : '🟥'} ${f.name} (${f.tf === 60 ? '1h' : f.tf + 'm'})  gap ${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}  (${f.fvg.size.toFixed(2)}× ATR)  last ${fmt(f.price)}  · trend ${f.regime}`)
-    + (f.ticket ? '\n' + ticketLine(f.ticket) : '') + (f.evidence ? `\n    evidence: ${Math.round(100 * f.evidence.win)}% net win vs ${Math.round(100 * (f.evidence.baseline || 0))}% random (n=${f.evidence.n})` : '');
-  const body = `Signals confirmed on bars closing by ${closed} ET.\n🚀 = early rally (stocks/ETFs/crypto, ${SIG.rally}m bars): bull gap on ≥ ${rallyVol()}× average volume. Futures: bullish and bearish gaps on ${SIG.gap === 60 ? '1h' : SIG.gap + 'm'} bars (shortable).\n\n` + [...rallies, ...fut].map(line).join('\n') +
-    (rallies.length ? `\n\nEarly-rally history: +2 ATR before −1 ATR hit 30% (older) / 41% (recent) of the time vs 27% / 31% for a random bar; break-even for 2:1 is 33%. Edge is modest and market-dependent.` : '') +
-    `\n\n⭐ = gap in the direction of the ticker's trend. ${statLine('gaps', '⭐ with trend')}\n${statLine('gaps', 'against trend')}` +
-    `\n\nConfirmed = 3-candle gap complete on a closed bar, at least ${(CFG.fvg.minAtr || 0.2)}× ATR(14). Price often returns to fill a gap; not a signal on its own. Not advice.\n— Headless Flip Watcher`;
-  mail(subject, body);
+  const rallies = fvgs.filter((f) => f.rally), fut = fvgs.filter((f) => !f.rally);
+  const stars = fvgs.filter((f) => f.star).length;
+  const names = fvgs.map((f) => f.name).join(', ');
+  const kind = rallies.length && fut.length ? 'Early rally and futures gap' : rallies.length ? 'Early rally' : 'Futures fair value gap';
+  const subject = `Flip Watcher · ${kind}: ${names} · ${closed} ET`;
+  const cards = fvgs.map((f) => {
+    const bull = f.fvg.side === 'BULL', tf = f.tf === 60 ? '1-hour' : `${f.tf}-minute`;
+    return { title: f.name, badge: { text: f.rally ? 'EARLY RALLY' : bull ? 'BULL GAP' : 'BEAR GAP', tone: bull ? 'good' : 'bad' },
+      sub: (f.rally ? `Bull gap on ${f.volx.toFixed(1)}× average volume (${tf} bars)` : `${bull ? 'Bullish' : 'Bearish'} fair value gap on ${tf} bars`) + ` · trend ${f.regime}${f.star ? ' · gap is in the direction of the trend ⭐' : ''}`,
+      fields: f.ticket ? [['Gap range', `${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}`], ['Gap size', `${f.fvg.size.toFixed(2)}× ATR`], ...ticketFields(f.ticket)]
+                       : [['Gap range', `${fmt(f.fvg.bottom)} – ${fmt(f.fvg.top)}`], ['Gap size', `${f.fvg.size.toFixed(2)}× ATR`], ['Last price', fmt(f.price)]],
+      lines: [evidenceLine(f.evidence), f.ticket ? ticketNote(f.ticket) : null].filter(Boolean) };
+  });
+  const spec = {
+    kind: 'Signal alert · ' + kind, status: { text: `${fvgs.length} signal${fvgs.length > 1 ? 's' : ''}${stars ? ` · ${stars} ⭐` : ''}`, tone: 'info' },
+    title: `${kind}: ${names}`, subtitle: `Confirmed on bars that closed by ${closed} ET. A fair value gap is a 3-candle jump that left a price range untraded.`,
+    sections: [
+      { title: 'Signals', blocks: [{ type: 'cards', items: cards }] },
+      { title: 'History for these signals', blocks: [{ type: 'list', items: [
+        rallies.length ? 'Early rallies: +2 ATR before −1 ATR happened 30% (older data) / 41% (recent) of the time vs 27% / 31% for a random bar. Break-even for 2:1 is 33%. The edge is modest and market-dependent.' : null,
+        statLine('gaps', '⭐ with trend') || null, statLine('gaps', 'against trend') || null].filter(Boolean) }] },
+      { title: 'How to read this', blocks: [{ type: 'list', items: [
+        `Early rally = stocks, ETFs and crypto: a bull gap on at least ${rallyVol()}× average volume (${SIG.rally}-minute bars). Futures: both bullish and bearish gaps on ${SIG.gap === 60 ? '1-hour' : SIG.gap + '-minute'} bars (you can short them).`,
+        `Confirmed = the 3-candle gap is complete on a closed bar and at least ${(CFG.fvg.minAtr || 0.2)}× ATR(14). Price often returns to fill a gap, so it is not a signal on its own.`] }] },
+    ],
+    footer: 'Sent by the Headless Flip Watcher (exchange data, no TradingView).',
+  };
+  UI.send(subject, spec);
 }
 
 async function sendEmail(flips) {
-  const best = flips.some((f) => f.setup.label === 'STRONG') ? '🔥' : '⚡';
-  const subject = `${best} ${flips.map((f) => `${f.regime === 'BUY' ? '⬆️' : '⬇️'} ${f.name} → ${f.regime}`).join(' · ')}`;
-  const body = flips.map((f) => `${f.star ? '⭐ ' : ''}${f.regime === 'BUY' ? '⬆️' : '⬇️'} ${f.name} → ${f.regime}  ${SCORE_EMOJI[f.setup.label]} ${f.setup.label} (${f.setup.score}/5)\n` +
-    (f.ticket ? ticketLine(f.ticket) + '\n' : '') + (f.evidence ? `  · evidence: ${Math.round(100 * f.evidence.win)}% net win vs ${Math.round(100 * (f.evidence.baseline || 0))}% random (n=${f.evidence.n}, ${f.evidence.scope})\n` : '') +
-    (f.star ? '  · ⭐ confluence: same-direction FVG on this ticker in the last 2h\n' : '') +
-    f.setup.factors.map((x) => `  · ${x}`).join('\n') + `\n  · ${TF_MIN}m bar closed ${new Date(f.barTime + TF_MS).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' })} ET`).join('\n\n') +
-    `\n\n${statLine('flips', flips[0].setup.label)}${flips.some((f) => f.star) ? '\n' + statLine('flips', '⭐ confluence') : ''}` +
-    '\n\n— Headless Flip Watcher (exchange data, no TradingView)';
-  mail(subject, body);
+  const best = flips.some((f) => f.setup.label === 'STRONG') ? 'STRONG' : 'MODERATE';
+  const names = flips.map((f) => `${f.name} → ${f.regime}`).join(', ');
+  const closedAt = (f) => new Date(f.barTime + TF_MS).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+  const subject = `Flip Watcher · Trend flip: ${names} · ${best}`;
+  const cards = flips.map((f) => ({ title: f.name, badge: { text: f.regime, tone: f.regime === 'BUY' ? 'good' : 'bad' },
+    sub: `Trend turned ${f.regime} on the ${TF_MIN}-minute chart (bar closed ${closedAt(f)} ET) · setup ${f.setup.label} ${f.setup.score} of 5${f.star ? ' · ⭐ same-direction gap on this ticker in the last 2 hours' : ''}`,
+    fields: f.ticket ? ticketFields(f.ticket) : [],
+    lines: [evidenceLine(f.evidence), f.ticket ? ticketNote(f.ticket) : null].filter(Boolean) }));
+  const spec = {
+    kind: 'Signal alert · Trend flip', status: { text: best, tone: best === 'STRONG' ? 'good' : 'warn' },
+    title: flips.length === 1 ? `${flips[0].name} turned ${flips[0].regime} on the ${TF_MIN}-minute chart` : `${flips.length} trend flips: ${names}`,
+    subtitle: 'A trend flip is a SuperTrend (3, 10) change of direction on a closed bar.',
+    sections: [
+      { title: 'Signals', blocks: [{ type: 'cards', items: cards }] },
+      ...flips.map((f) => ({ title: `Why ${f.name} scores ${f.setup.score} of 5`, blocks: [{ type: 'list', items: f.setup.factors }] })),
+      { title: 'History for this kind of signal', blocks: [{ type: 'para', text: [statLine('flips', flips[0].setup.label), flips.some((f) => f.star) ? statLine('flips', '⭐ confluence') : ''].filter(Boolean).join(' ') || 'Not enough history yet.' }] },
+    ],
+    footer: 'Sent by the Headless Flip Watcher (exchange data, no TradingView).',
+  };
+  UI.send(subject, spec);
 }
 
 // ---------- daily matrix report (08:00 + 16:30, com.dhruv.headlessmatrix) ----------
@@ -454,26 +483,27 @@ async function matrix(send) {
   }) : [];
   const flippedNames = new Set(changes.map((c) => c.name));
 
-  const chip = (r) => {
-    const buy = r.regime === 'BUY', stale = Date.now() - (r.barTime + TF_MS) > 90 * 60e3;
-    return `<td style="padding:5px 8px;border-radius:4px;background:${buy ? '#089981' : '#f23645'};color:#fff;font:600 12px -apple-system,Helvetica,Arial;white-space:nowrap${flippedNames.has(r.name) ? ';outline:2px solid #f5a623' : ''}">${esc(r.name)}${stale ? ' <span style="opacity:.75;font-weight:400">·' + esc(et(r.barTime + TF_MS, { weekday: 'short', hour: 'numeric', minute: '2-digit' })) + '</span>' : ''}</td>`;
-  };
-  const rows = [];
+  const px = (x) => (x >= 1000 ? x.toLocaleString('en-US', { maximumFractionDigits: 0 }) : x.toPrecision(4));
+  const hm = (t) => et(t, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  const pc = (x) => (x == null ? '–' : Math.round(100 * x) + '%');
+  const hour24 = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false });
+  const isAM = hour24 < 12;
+  const sells = ok.length - buys;
+
+  // 1. Trend by group: BUY chips first, then SELL; flipped since the last report get an amber ring.
+  const chipRows = [];
   for (const g of GROUP_ORDER.concat([...new Set(Object.values(groupOf))].filter((x) => !GROUP_ORDER.includes(x)))) {
     const items = ok.filter((r) => groupOf[r.tv] === g);
     if (!items.length) continue;
     const b = items.filter((r) => r.regime === 'BUY'), sl = items.filter((r) => r.regime === 'SELL');
-    const cells = b.concat(sl);
-    const lines = [];
-    for (let i = 0; i < cells.length; i += 7) lines.push('<tr>' + cells.slice(i, i + 7).map(chip).join('\n') + '</tr>');
-    rows.push(`<tr><td style="padding:10px 10px 4px 0;vertical-align:top;font:600 13px -apple-system,Helvetica,Arial;color:#222;white-space:nowrap">${esc(g)}<br><span style="font-weight:400;color:#666">${b.length}/${items.length} BUY</span></td>` +
-      `<td style="padding-top:6px"><table cellspacing="3" cellpadding="0">\n${lines.join('\n')}\n</table></td></tr>`);
+    chipRows.push({ label: g, sub: `${b.length} of ${items.length} BUY`, chips: b.concat(sl).map((r) => {
+      const stale = Date.now() - (r.barTime + TF_MS) > 90 * 60e3;
+      return { text: r.name, tone: r.regime === 'BUY' ? 'good' : 'bad', ring: flippedNames.has(r.name), note: stale ? '· ' + et(r.barTime + TF_MS, { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : '' };
+    }) });
   }
-  const when = et(Date.now(), { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-  const changeHtml = changes.length
-    ? changes.map((c) => `<li>${esc(et(c.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · <b>${esc(c.name)}</b> → <span style="color:${c.to === 'BUY' ? '#089981' : '#f23645'};font-weight:600">${c.to}</span> <span style="color:#888">${esc(c.score)}</span></li>`).join('\n')
-    : '<li style="color:#888">none</li>';
-  // FVGs since the last report, same tradable rule as the FVG emails: bull for all, bear for futures only.
+  const changeRows = changes.map((c) => ({ t: hm(c.t), name: { v: c.name, bold: true }, to: { v: c.to, tone: c.to === 'BUY' ? 'good' : 'bad', bold: true }, score: c.score || '' }));
+
+  // 2. FVGs and early rallies since the last report, same tradable rule as the FVG emails: bull for all, bear for futures only.
   const futNames = new Set(CFG.symbols.filter((x) => x.group === 'futures').map((x) => x.tv.split(':')[1]));
   const fvgFile = path.join(DIR, 'fvg-alerts.tsv');
   const gaps = fs.existsSync(fvgFile) ? fs.readFileSync(fvgFile, 'utf8').trim().split('\n').flatMap((line) => {
@@ -482,89 +512,86 @@ async function matrix(send) {
     return Date.parse(ts) > since && show
       ? [{ t: Date.parse(ts), name, side, bottom: +bottom, top: +top, size: +size, star: star === 'star', volx: +volx || 0, rally: rally === 'rally' }] : [];
   }) : [];
-  const px = (x) => (x >= 1000 ? x.toLocaleString('en-US', { maximumFractionDigits: 0 }) : x.toPrecision(4));
-  const gapHtml = gaps.length
-    ? gaps.map((g) => `<li>${esc(et(g.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · ${g.rally ? '🚀' : ''}${g.star ? '⭐' : ''}${g.side === 'BULL' ? '🟩' : '🟥'} <b>${esc(g.name)}</b>${g.rally ? ` <span style="color:#089981">early rally, ${g.volx.toFixed(1)}× vol</span>` : ''} ${px(g.bottom)} – ${px(g.top)} <span style="color:#888">${g.size.toFixed(2)}× ATR</span></li>`).join('\n')
-    : '<li style="color:#888">none</li>';
-  // Brief sections (#13): event-desk watchlist (morning), ledger evidence, and signals held for the brief.
-  let briefHtml = '';
+  const gapRows = gaps.map((g) => ({ t: hm(g.t), name: { v: g.name, bold: true }, kind: { v: (g.rally ? 'Early rally' : g.side === 'BULL' ? 'Bull gap' : 'Bear gap') + (g.star ? ' ⭐' : ''), tone: g.side === 'BULL' ? 'good' : 'bad' },
+    range: `${px(g.bottom)} – ${px(g.top)}`, size: `${g.size.toFixed(2)}× ATR`, vol: g.rally ? `${g.volx.toFixed(1)}× volume` : '' }));
+
+  // 3. Brief sections: watchlist (morning), option spreads, crypto, held-back signals, evidence.
+  const secs = [];
+  let actCount = null, cryptoSection = null, heldSection = null, evidenceSection = null, watchSection = null;
   try {
-    const morning = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }) < 12;
     const wlFile = path.join(require('os').homedir(), 'market-lab', 'event-desk', 'data', 'digest', new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' }), 'watchlist.json');
-    if (morning && fs.existsSync(wlFile)) briefHtml += `<h3 style="margin:18px 0 4px">Watchlist briefing (event desk)</h3>${JSON.parse(fs.readFileSync(wlFile, 'utf8')).body}`;
+    if (isAM && fs.existsSync(wlFile)) {
+      const wl = JSON.parse(fs.readFileSync(wlFile, 'utf8'));
+      watchSection = wl.sections ? { blocks: wl.sections.flatMap((s) => s.blocks) }
+                                 : { blocks: [{ type: 'raw', html: wl.body, text: String(wl.body).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() }] };
+    }
     const ev = JSON.parse(fs.readFileSync(ledger.EVIDENCE, 'utf8'));
-    const pc = (x) => (x == null ? '–' : Math.round(100 * x) + '%');
     const evRows = Object.entries(ev.groups).map(([k, v]) => [k, v['*']]).sort((a, b) => (b[1].proven - a[1].proven) || b[1].n - a[1].n)
-      .map(([k, r]) => `<tr><td style="padding:2px 8px">${esc(k.replace('|', ' · '))}</td><td style="padding:2px 8px;text-align:right">${r.n}</td><td style="padding:2px 8px;text-align:right">${pc(r.win)}</td><td style="padding:2px 8px;text-align:right">${pc(r.baseline)}</td><td style="padding:2px 8px;text-align:right">${r.meanNet == null ? '–' : (100 * r.meanNet).toFixed(2) + '%'}</td><td style="padding:2px 8px;font-weight:600;color:${r.proven ? '#089981' : '#999'}">${r.proven ? 'PROVEN · real-time' : 'brief only'}</td></tr>`).join('\n');
-    briefHtml += `<h3 style="margin:18px 0 4px">Evidence: which signals earn a real-time email (last ${ev.windowDays} days, after costs)</h3>
-<table cellspacing="0" style="font-size:13px;border-collapse:collapse"><tr><th style="text-align:left;padding:2px 8px">signal</th><th style="padding:2px 8px">n</th><th style="padding:2px 8px">net win</th><th style="padding:2px 8px">random</th><th style="padding:2px 8px">mean net</th><th></th></tr>
-${evRows}
-</table><div style="color:#666;font-size:12px">Proven = ≥ ${ev.minN} graded signals over ≥ ${ev.minDays || 10} separate days, the win rate's lower bound above random entry for the same assets (Kalshi: above price + fee), and average net return still positive after subtracting one standard error. A market-condition slice only overrides the overall record with ≥ ${ev.regimeMinN || 60} signals. Everything else waits for these briefs.</div>`;
-    // Today's market-iv ACT spreads (each sector), from the ledger: what was actionable, with its ticket.
+      .map(([k, r]) => ({ sig: { v: k.replace('|', ' · '), bold: true }, n: String(r.n), win: pc(r.win), rnd: pc(r.baseline), net: r.meanNet == null ? '–' : (100 * r.meanNet).toFixed(2) + '%',
+        verdict: { v: r.proven ? 'PROVEN: real-time email' : 'brief only', tone: r.proven ? 'good' : 'neutral', bold: !!r.proven } }));
+    evidenceSection = { title: `Evidence: which signals earn a real-time email (last ${ev.windowDays} days, after costs)`,
+      note: `Proven = at least ${ev.minN} graded signals over at least ${ev.minDays || 10} separate days, a win rate whose lower bound beats random entries for the same assets, and an average net return still positive after subtracting one standard error. A market-condition slice only overrides the overall record with at least ${ev.regimeMinN || 60} signals. Everything else waits for these briefs.`,
+      blocks: [{ type: 'table', columns: [{ key: 'sig', label: 'Signal' }, { key: 'n', label: 'n', align: 'right' }, { key: 'win', label: 'Net win', align: 'right' }, { key: 'rnd', label: 'Random', align: 'right' }, { key: 'net', label: 'Mean net', align: 'right' }, { key: 'verdict', label: 'Verdict' }], rows: evRows }] };
     const dayStart = new Date(new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York' })).getTime();
     const spreads = ledger.open().prepare(`SELECT kind, sym, price, meta, ticket FROM signals WHERE product='market-iv' AND t >= ? ORDER BY kind`).all(dayStart);
-    if (spreads.length || !morning) {
-      const sl = spreads.map((x) => { const m = JSON.parse(x.meta || '{}'), tk = x.ticket ? JSON.parse(x.ticket) : null;
-        return `<li><b>${esc(x.sym.split(':')[1])}</b> <span style="color:#666">${esc(x.kind.replace('spread:', ''))}</span> · buy ${esc(String(m.exp || '').slice(5))} $${m.long}C / sell $${m.short}C @ $${x.price.toFixed(2)} × ${m.qty} · P(profit) ${Math.round(100 * (m.p_profit || 0))}%${m.event_before_exp ? ' ⚠' : ''}${tk ? ` · 🎫 <b>${esc(tk.id)}</b>` : ''}</li>`; }).join('\n');
-      briefHtml += `<h3 style="margin:18px 0 4px">✅ Today's ACT spreads (market-iv, all sectors): ${spreads.length}</h3><ul style="margin:0;padding-left:18px">${sl || '<li style="color:#888">none passed today</li>'}</ul>`;
+    if (spreads.length || !isAM) {
+      actCount = spreads.length;
+      const rows = spreads.map((x) => { const m = JSON.parse(x.meta || '{}'), tk = x.ticket ? JSON.parse(x.ticket) : null;
+        return { tk: { v: x.sym.split(':')[1], bold: true }, sector: x.kind.replace('spread:', ''), trade: `Buy ${String(m.exp || '').slice(5)} $${m.long}C / sell $${m.short}C`, px: `$${x.price.toFixed(2)} × ${m.qty}`,
+          p: `${Math.round(100 * (m.p_profit || 0))}%`, note: { v: (m.event_before_exp ? 'event before expiry · ' : '') + (tk ? `ticket ${tk.id}` : ''), tone: m.event_before_exp ? 'warn' : 'neutral' } }; });
+      secs.push({ title: `Actionable bull call spreads today: ${spreads.length} (market-iv, all sectors)`,
+        blocks: [{ type: 'table', empty: 'None passed today.', columns: [{ key: 'tk', label: 'Ticker' }, { key: 'sector', label: 'Sector' }, { key: 'trade', label: 'Trade' }, { key: 'px', label: 'Debit × qty', align: 'right' }, { key: 'p', label: 'P(profit)', align: 'right' }, { key: 'note', label: 'Note' }], rows }] });
     }
-    // Crypto scanner (crypto-scan.js): bias board as context + signals held for the brief.
     const cs = (() => { try { return JSON.parse(fs.readFileSync(path.join(DIR, 'crypto-state.json'), 'utf8')); } catch { return null; } })();
     if (cs && cs.board) {
-      const chip = (b) => `<span style="display:inline-block;margin:2px;padding:3px 7px;border-radius:4px;color:#fff;font:600 12px -apple-system,Helvetica;background:${b.score >= 15 ? '#089981' : b.score <= -15 ? '#f23645' : '#888'}">${esc(b.name)} ${b.score > 0 ? '+' : ''}${b.score}</span>`;
-      const top = cs.board.slice(0, 12).map(chip).join(''), bottom = cs.board.slice(-8).reverse().map(chip).join('');
+      const chip = (b) => ({ text: `${b.name} ${b.score > 0 ? '+' : ''}${b.score}`, tone: b.score >= 15 ? 'good' : b.score <= -15 ? 'bad' : 'neutral' });
       const csig = ledger.open().prepare(`SELECT kind, sym, t, price, emailed FROM signals WHERE product='crypto' AND source='live' AND t > ? ORDER BY t`).all(since);
-      const cl = csig.map((x) => `<li>${esc(et(x.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · <b>${esc(x.sym.split(':')[1])}</b> ${esc(x.kind)} at ${px(x.price)}${x.emailed ? ' <span style="color:#089981">(emailed)</span>' : ''}</li>`).join('\n');
-      briefHtml += `<h3 style="margin:18px 0 4px">🪙 Crypto: ${cs.counts.ok} coins (Robinhood ${cs.counts.robinhood}, Coinbase ${cs.counts.coinbase}, Wallet ${cs.counts.wallet}) · BTC 24h ${cs.btc24 == null ? '–' : (100 * cs.btc24).toFixed(1) + '%'}</h3>
-<div style="font-size:12px;color:#666">Bias score (−100..+100: SuperTrend 15m/1h/4h, EMA stack, RSI, strength vs BTC, volume). Context only: in testing it did not predict the next 24h (strong-bear coins rose more often, 58% vs 48%).</div>
-<div style="margin:4px 0"><b style="font-size:12px">Highest</b><br>${top}</div><div style="margin:4px 0"><b style="font-size:12px">Lowest</b><br>${bottom}</div>
-<div style="font-size:13px;margin-top:6px"><b>Crypto signals since last brief (${csig.length})</b></div><ul style="margin:0;padding-left:18px">${cl || '<li style="color:#888">none</li>'}</ul>`;
+      cryptoSection = { title: `Crypto: ${cs.counts.ok} coins on Coinbase and Robinhood · BTC 24h ${cs.btc24 == null ? '–' : (100 * cs.btc24).toFixed(1) + '%'}`,
+        note: 'Bias score runs −100 to +100 (SuperTrend on 15m/1h/4h, EMA stack, RSI, strength vs BTC, volume). It is context only: in testing it did not predict the next 24 hours.',
+        blocks: [{ type: 'chipRows', items: [{ label: 'Highest bias', chips: cs.board.slice(0, 12).map(chip) }, { label: 'Lowest bias', chips: cs.board.slice(-8).reverse().map(chip) }] },
+          { type: 'table', empty: 'No crypto signals since the last brief.', columns: [{ key: 't', label: 'When' }, { key: 'c', label: 'Coin' }, { key: 'k', label: 'Signal' }, { key: 'p', label: 'Price', align: 'right' }, { key: 'e', label: 'Emailed' }],
+            rows: csig.map((x) => ({ t: hm(x.t), c: { v: x.sym.split(':')[1], bold: true }, k: x.kind, p: px(x.price), e: x.emailed ? { v: 'yes', tone: 'good' } : 'held for brief' })) }] };
     }
     const held = ledger.open().prepare(`SELECT kind, sym, side, t, price FROM signals WHERE product='headless' AND source='live' AND emailed=0 AND t > ?
       AND (kind IN ('flip:STRONG','rally','gap:futures')) ORDER BY t`).all(since);
-    const hl = held.map((h) => `<li>${esc(et(h.t, { weekday: 'short', hour: 'numeric', minute: '2-digit' }))} · <b>${esc(h.sym.split(':')[1])}</b> ${esc(h.kind)} ${h.side === 'long' ? '⬆️' : '⬇️'} at ${px(h.price)}</li>`).join('\n');
-    briefHtml += `<h3 style="margin:18px 0 4px">Held for this brief: not proven enough for real-time (${held.length})</h3><ul style="margin:0;padding-left:18px">${hl || '<li style="color:#888">none</li>'}</ul>`;
+    heldSection = { title: `Held back: not proven enough for a real-time email (${held.length})`,
+      blocks: [{ type: 'table', empty: 'None.', columns: [{ key: 't', label: 'When' }, { key: 'tk', label: 'Ticker' }, { key: 'k', label: 'Signal' }, { key: 'd', label: 'Direction' }, { key: 'p', label: 'Price', align: 'right' }],
+        rows: held.map((x) => ({ t: hm(x.t), tk: { v: x.sym.split(':')[1], bold: true }, k: x.kind, d: { v: x.side === 'long' ? 'long' : 'short', tone: x.side === 'long' ? 'good' : 'bad' }, p: px(x.price) })) }] };
   } catch (e) { log('brief sections failed: ' + e.message); }
-  let board = '';
+  let scoreSection = null;
   try {
     const st = await require('./headless-stats.js').computeStats();
-    const p = (x) => (x == null ? '–' : Math.round(100 * x) + '%');
-    const td = (x, b) => `<td style="padding:2px 8px;text-align:right${b ? ';font-weight:600' : ''}">${x}</td>`;
-    const fr = Object.entries(st.flips).map(([k, v]) => `<tr><td style="padding:2px 8px">${esc(k)}</td>${td(v.n)}${td(p(v['4h'].right))}${td(p(v['24h'].right), 1)}</tr>`).join('\n');
-    const gr = Object.entries(st.gaps).map(([k, v]) => `<tr><td style="padding:2px 8px">${esc(k)}</td>${td(v.n)}${td(p(v.tested))}${td(p(v.held), 1)}${td(p(v['24h'].right))}${td(p(v.rally21))}</tr>`).join('\n');
-    const th = (a) => a.map((x) => `<th style="padding:2px 8px;text-align:right;color:#666;font-weight:400">${x}</th>`).join('');
-    board = `<h3 style="margin:18px 0 4px">Scoreboard: what happened after past signals (since ${esc(st.from.slice(0, 10))})</h3>
-<table cellspacing="0" style="font-size:13px;border-collapse:collapse"><tr><th style="text-align:left;padding:2px 8px">Flips</th>${th(['n', 'right 4h', 'right 24h'])}</tr>
-${fr}
-</table>
-<table cellspacing="0" style="font-size:13px;border-collapse:collapse;margin-top:8px"><tr><th style="text-align:left;padding:2px 8px">Tradable gaps</th>${th(['n', 'tested 24h', 'held', 'right 24h', '2:1 rally'])}</tr>
-${gr}
-</table>
-<div style="color:#666;font-size:12px">"Right" = moved in the signal's direction (BUY/bull long, SELL/bear short). Held = came back into the gap without closing through it. Before fees; history, not advice.</div>`;
+    scoreSection = { title: `Scoreboard: what happened after past signals (since ${st.from.slice(0, 10)})`,
+      note: '"Right" = price moved in the signal\'s direction (BUY/bull long, SELL/bear short). Held = came back into the gap without closing through it. Before fees. History, not advice.',
+      blocks: [{ type: 'table', columns: [{ key: 'k', label: 'Trend flips' }, { key: 'n', label: 'n', align: 'right' }, { key: 'r4', label: 'Right after 4h', align: 'right' }, { key: 'r24', label: 'Right after 24h', align: 'right' }],
+          rows: Object.entries(st.flips).map(([k, v]) => ({ k: { v: k, bold: true }, n: String(v.n), r4: pc(v['4h'].right), r24: { v: pc(v['24h'].right), bold: true } })) },
+        { type: 'table', columns: [{ key: 'k', label: 'Tradable gaps' }, { key: 'n', label: 'n', align: 'right' }, { key: 'tested', label: 'Tested in 24h', align: 'right' }, { key: 'held', label: 'Held', align: 'right' }, { key: 'r24', label: 'Right after 24h', align: 'right' }, { key: 'r21', label: '2:1 rally', align: 'right' }],
+          rows: Object.entries(st.gaps).map(([k, v]) => ({ k: { v: k, bold: true }, n: String(v.n), tested: pc(v.tested), held: { v: pc(v.held), bold: true }, r24: pc(v['24h'].right), r21: pc(v.rally21) })) }] };
   } catch (e) { log('scoreboard failed: ' + e.message); }
-  const html = `<div style="font:14px -apple-system,Helvetica,Arial;color:#222;max-width:760px">
-<h2 style="margin:0 0 4px">Flip matrix · ${esc(when)} ET</h2>
-<div style="font-size:15px;margin-bottom:12px"><b style="color:#089981">${buys} BUY</b> / <b style="color:#f23645">${ok.length - buys} SELL</b> of ${ok.length} · ${Math.round(100 * (ok.length - buys) / (ok.length || 1))}% SELL${last.buys != null ? ` · last report ${last.buys} BUY / ${last.sells} SELL` : ''}</div>
-<table cellspacing="0" cellpadding="0">
-${rows.join('\n')}
-</table>
-<h3 style="margin:18px 0 4px">Flips since last report (${changes.length})</h3>
-<ul style="margin:0;padding-left:18px">
-${changeHtml}
-</ul>
-<h3 style="margin:18px 0 4px">🚀 Early rallies & futures FVGs since last report (${gaps.length})</h3>
-<div style="color:#666;font-size:12px;margin-bottom:4px">🚀 = stocks/ETFs/crypto bull gap on ≥ ${(CFG.fvg && CFG.fvg.rallyVolX) || 2.5}× average volume (early rally). Futures: bullish and bearish gaps. Gaps ≥ ${(CFG.fvg && CFG.fvg.minAtr) || 0.2}× ATR on closed ${TF_MIN}m bars.</div>
-<ul style="margin:0;padding-left:18px">
-${gapHtml}
-</ul>
-${briefHtml}
-${board}
-<p style="color:#666;font-size:12px;margin-top:16px">SuperTrend 3/10 on closed ${TF_MIN}m bars. Orange outline = flipped since last report. A time after a ticker = its last closed bar is older than 90 min (market closed or a lagging feed).${bad.length ? '<br><b style="color:#f23645">No data:</b> ' + esc(bad.map((r) => r.name + ' (' + r.error + ')').join(', ')) : ''}<br>Flip alerts email ${CFG.flipsEmailConfluence && CFG.minScore > 5 ? '⭐ confluence only' : CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE + STRONG'} · Headless Flip Watcher · not trading advice.</p>
-</div>`;
-  const isAM = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }) < 12;
-  const subject = `${isAM ? '☀️ Morning brief' : '🌙 Closing brief'} ${et(Date.now(), { hour: 'numeric', minute: '2-digit' })} · ${buys} BUY / ${ok.length - buys} SELL` + (changes.length ? ` · ${changes.length} flip${changes.length > 1 ? 's' : ''}` : '') + (gaps.length ? ` · ${gaps.length} FVG${gaps.length > 1 ? 's' : ''}` : '');
+
+  const when = et(Date.now(), { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  const sections = [
+    { blocks: [{ type: 'kpis', items: [{ label: 'BUY', value: String(buys), tone: 'good', sub: `of ${ok.length} tickers` }, { label: 'SELL', value: String(sells), tone: 'bad', sub: `${Math.round(100 * sells / (ok.length || 1))}% of tickers` },
+      { label: 'Flips', value: String(changes.length), sub: 'since last report' }, { label: 'Gaps and rallies', value: String(gaps.length), sub: 'since last report' }].concat(actCount == null ? [] : [{ label: 'Option spreads', value: String(actCount), sub: 'actionable today' }]) }] },
+    { title: 'Trend by group', note: `SuperTrend (3, 10) on closed ${TF_MIN}-minute bars. Amber ring = flipped since the last report. A time after a ticker = its last closed bar is older than 90 minutes (market closed or a lagging feed).${last.buys != null ? ` Last report: ${last.buys} BUY / ${last.sells} SELL.` : ''}`, blocks: [{ type: 'chipRows', items: chipRows }] },
+    { title: `Trend flips since the last report (${changes.length})`, blocks: [{ type: 'table', empty: 'No flips.', columns: [{ key: 't', label: 'When' }, { key: 'name', label: 'Ticker' }, { key: 'to', label: 'Now' }, { key: 'score', label: 'Setup' }], rows: changeRows }] },
+    { title: `Early rallies and futures gaps since the last report (${gaps.length})`, note: `Early rally = stocks, ETFs and crypto: a bull gap on at least ${(CFG.fvg && CFG.fvg.rallyVolX) || 2.5}× average volume. Futures: bullish and bearish gaps. Gaps of at least ${(CFG.fvg && CFG.fvg.minAtr) || 0.2}× ATR on closed bars.`,
+      blocks: [{ type: 'table', empty: 'None.', columns: [{ key: 't', label: 'When' }, { key: 'name', label: 'Ticker' }, { key: 'kind', label: 'Type' }, { key: 'range', label: 'Gap range', align: 'right' }, { key: 'size', label: 'Size', align: 'right' }, { key: 'vol', label: 'Volume', align: 'right' }], rows: gapRows }] },
+  ];
+  for (const s of [watchSection, ...secs.splice(0), cryptoSection, heldSection, evidenceSection, scoreSection]) if (s) sections.push(s);
+  if (bad.length) sections.push({ title: 'No data', blocks: [{ type: 'callout', tone: 'warn', text: bad.map((r) => `${r.name} (${r.error})`).join(', ') }] });
+  const emailMode = CFG.flipsEmailConfluence && CFG.minScore > 5 ? 'confluence only' : CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE and STRONG';
+  const spec = {
+    kind: isAM ? 'Morning brief' : 'Closing brief', status: { text: `${buys} BUY · ${sells} SELL`, tone: buys >= sells ? 'good' : 'bad' },
+    title: `${isAM ? 'Morning' : 'Closing'} Brief: Trend Matrix, Gaps and Signals for ${ok.length} Tickers`,
+    subtitle: `${when} ET · stocks, ETFs, futures and crypto`,
+    sections, footer: `Real-time flip emails: ${emailMode}. Sent by the Headless Flip Watcher.`,
+  };
+  const subject = `Flip Watcher ${isAM ? 'Morning' : 'Closing'} Brief · ${et(Date.now(), { hour: 'numeric', minute: '2-digit' })} ET · ${buys} BUY / ${sells} SELL` + (changes.length ? ` · ${changes.length} flip${changes.length > 1 ? 's' : ''}` : '') + (gaps.length ? ` · ${gaps.length} gap${gaps.length > 1 ? 's' : ''}` : '');
+  const html = UI.render(spec).html;
   if (!send) { fs.writeFileSync(path.join(DIR, 'headless-matrix-preview.html'), html); console.log(subject + '\npreview -> headless-matrix-preview.html'); return; }
-  mail(subject, html, true);
+  UI.send(subject, spec, { timeoutMs: 60000 });
+  if (process.env.EMAIL_SUBJECT_PREFIX) return;   // sample send: leave the real report bookkeeping alone
   fs.writeFileSync(MATRIX_FILE, JSON.stringify({ sentAt: new Date().toISOString(), buys, sells: ok.length - buys }, null, 1));
   log(`MATRIX sent: ${buys} BUY / ${ok.length - buys} SELL · ${changes.length} flips since last`);
 }

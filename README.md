@@ -113,3 +113,13 @@ Speech is off by default since 2026-09-28 (banners only); `FLIP_SPEAK=1` turns i
 - Node (uses `/Users/dhruvpatel/.local/bin/node`)
 - `ws`, borrowed from the existing `~/tradingview-mcp/node_modules`
 - TradingView Desktop running with `--remote-debugging-port=9222` (its default)
+
+## Email layout (2026-09-30)
+Every automated email in the ecosystem is rendered by one shared template, `email-ui.js` (Python products call it through `email_ui.py`).
+Each email is a spec: `kind` (small label), `title` stating exactly what the email is, `subtitle` (when / scope), an optional status chip, and sections built from
+blocks (`kpis`, `table`, `cards`, `chipRows`, `list`, `callout`, `code`, `raw`). `send()` sends multipart (HTML + plain-text alternative) through `send-email.js`
+(bodies are base64, subjects RFC 2047, so long HTML and emoji are safe). Subjects follow `Product · What it is: key facts`. `EMAIL_SUBJECT_PREFIX="[TEST] "`
+prefixes every subject for sample sends. Converted: trend-flip, FVG / early-rally and crypto alerts, morning / closing briefs (this repo); watchdog alerts and the daily
+delivery report, event-desk watchlist and options digests, BTC recorder report, paper-lab weekly, Kalshi BTC calls (market-lab, kalshi-btc-agent); Atlanta market digest
+(zillow-agent); coin-launch digest, +50% picks, Coinbase listings and the coin-detector report (`listed.py email`); the Sunday portfolio review (task prompt now builds a spec).
+`email_ui.from_text()` turns a plain-text report (ALL-CAPS headings, indented label/value rows) into a spec for products that still build text.

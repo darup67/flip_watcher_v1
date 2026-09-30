@@ -226,15 +226,25 @@ async function scan() {
 }
 
 function email(xs) {
+  const UI = require('./email-ui.js');
   const et = (t) => new Date(t).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
-  const label = (k) => (k === 'rally' ? '🚀 EARLY RALLY (30m)' : k === 'gap:bull' ? '🟩 bull gap (1h)' : `⬆️ ${k.replace('flip:', '')} flip → BUY (15m)`);
-  const subject = `🪙 Crypto ${et(Math.max(...xs.map((x) => x.t)))}: ` + xs.map((x) => `${x.s.name} ${x.kind === 'rally' ? '🚀' : x.kind.startsWith('flip') ? '⬆️' : '🟩'}`).join(', ');
-  const body = xs.map((x) => `${label(x.kind)}  ${x.s.name}${x.s.onchain ? ` (${x.s.onchain} onchain)` : ''} · price ${x.bar.c.toPrecision(6)}` +
-    (x.volx ? ` · ${x.volx.toFixed(1)}× volume` : '') + (x.bias ? ` · bias ${x.bias.score >= 0 ? '+' : ''}${x.bias.score} (${x.bias.label})` : '') +
-    `\n  🎫 ${x.ticket.id}: BUY $${x.ticket.notionalUsd} of ${x.s.name}, stop ${x.ticket.stop}, target ${x.ticket.target} (risk ≈ $${x.ticket.riskUsd}) · ${x.ticket.account} · you place it yourself; say "check ticket ${x.ticket.id}" for live quotes` +
-    `\n  evidence: ${Math.round(100 * x.evidence.win)}% net win vs ${Math.round(100 * (x.evidence.baseline || 0))}% random (n=${x.evidence.n}, ${x.evidence.days} days)`).join('\n\n') +
-    '\n\nOnly signal types the trade-core ledger has proven (after costs, vs random entry) are emailed; everything else is in the 08:55 / 16:30 briefs.\nNot advice.\n— Crypto scanner';
-  H.mail(subject, body);
+  const label = (k) => (k === 'rally' ? 'EARLY RALLY (30-minute bars)' : k === 'gap:bull' ? 'BULL GAP (1-hour bars)' : `${k.replace('flip:', '')} TREND FLIP to BUY (15-minute bars)`);
+  const names = xs.map((x) => x.s.name).join(', ');
+  const at = et(Math.max(...xs.map((x) => x.t)));
+  const subject = `Crypto Scanner · Signal: ${names} · ${at} ET`;
+  const cards = xs.map((x) => ({ title: x.s.name, badge: { text: 'BUY', tone: 'good' },
+    sub: `${label(x.kind)}${x.s.onchain ? ` · ${x.s.onchain} onchain` : ''}${x.volx ? ` · ${x.volx.toFixed(1)}× volume` : ''}${x.bias ? ` · bias ${x.bias.score >= 0 ? '+' : ''}${x.bias.score} (${x.bias.label})` : ''}`,
+    fields: [['Price', x.bar.c.toPrecision(6)], ['Action', 'BUY'], ['Size', `$${x.ticket.notionalUsd}`], ['Stop', x.ticket.stop], ['Target', x.ticket.target], ['Risk', `≈ $${x.ticket.riskUsd}`]],
+    lines: [`Evidence: ${Math.round(100 * x.evidence.win)}% net win vs ${Math.round(100 * (x.evidence.baseline || 0))}% for random entries (n=${x.evidence.n}, ${x.evidence.days} days).`,
+            `Order ticket ${x.ticket.id} · ${x.ticket.account}. You place it yourself; ask Claude "check ticket ${x.ticket.id}" for live quotes.`] }));
+  UI.send(subject, {
+    kind: 'Signal alert · Crypto', status: { text: `${xs.length} signal${xs.length > 1 ? 's' : ''}`, tone: 'info' },
+    title: xs.length === 1 ? `${xs[0].s.name}: ${label(xs[0].kind).toLowerCase()}` : `${xs.length} crypto signals: ${names}`,
+    subtitle: `Coins listed on Coinbase or Robinhood. Confirmed on bars that closed by ${at} ET.`,
+    sections: [{ title: 'Signals', blocks: [{ type: 'cards', items: cards }] },
+      { title: 'Why you got this email', blocks: [{ type: 'para', text: 'Only signal types the trade-core ledger has proven after costs, against random entries, are emailed in real time. Everything else is in the 08:55 and 16:30 briefs.' }] }],
+    footer: 'Sent by the Crypto Scanner.',
+  });
 }
 
 // ---------------------------------------------------------------- research: replay + bias lab

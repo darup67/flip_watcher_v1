@@ -39,19 +39,30 @@ function dotStuff(text) {
   return text.replace(/\r?\n/g, '\r\n').replace(/^\.(?=.)/gm, '..');
 }
 
+const b64 = (str) => Buffer.from(str, 'utf8').toString('base64').replace(/(.{76})/g, '$1\r\n');
+
 function buildMessage() {
-  const stuffedBody = dotStuff(body || subject);
-  return [
+  // Subject is RFC 2047 encoded, bodies are base64: robust for emoji, long HTML lines and SMTP dot rules.
+  const head = [
     `From: Flip Watcher <${GMAIL_USER}>`,
     `To: ${GMAIL_USER}`,
-    `Subject: ${subject}`,
+    `Subject: =?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`,
     `Date: ${new Date().toUTCString()}`,
     'MIME-Version: 1.0',
-    // SEND_EMAIL_HTML=1 sends the body as HTML (headless matrix report); default stays plain text.
-    `Content-Type: ${process.env.SEND_EMAIL_HTML === '1' ? 'text/html' : 'text/plain'}; charset=UTF-8`,
-    '',
-    stuffedBody,
-  ].join('\r\n');
+  ];
+  const isHtml = process.env.SEND_EMAIL_HTML === '1';
+  // SEND_EMAIL_TEXT_FILE: plain-text alternative for an HTML body (multipart/alternative), written by email-ui.js.
+  let alt = '';
+  try { if (process.env.SEND_EMAIL_TEXT_FILE) alt = require('fs').readFileSync(process.env.SEND_EMAIL_TEXT_FILE, 'utf8'); } catch (e) { /* no alternative */ }
+  const content = body || subject;
+  if (isHtml && alt) {
+    const bd = `=_flip_${Date.now().toString(36)}`;
+    return head.concat([`Content-Type: multipart/alternative; boundary="${bd}"`, '',
+      `--${bd}`, 'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', b64(alt),
+      `--${bd}`, 'Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', b64(content),
+      `--${bd}--`, '']).join('\r\n');
+  }
+  return head.concat([`Content-Type: ${isHtml ? 'text/html' : 'text/plain'}; charset=UTF-8`, 'Content-Transfer-Encoding: base64', '', b64(content)]).join('\r\n');
 }
 
 function attempt(retryNum) {
