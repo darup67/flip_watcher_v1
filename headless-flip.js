@@ -552,6 +552,19 @@ async function matrix(send) {
           { type: 'table', empty: 'No crypto signals since the last brief.', columns: [{ key: 't', label: 'When' }, { key: 'c', label: 'Coin' }, { key: 'k', label: 'Signal' }, { key: 'p', label: 'Price', align: 'right' }, { key: 'e', label: 'Emailed' }],
             rows: csig.map((x) => ({ t: hm(x.t), c: { v: x.sym.split(':')[1], bold: true }, k: x.kind, p: px(x.price), e: x.emailed ? { v: 'yes', tone: 'good' } : 'held for brief' })) }] };
     }
+    try {   // social sentiment among the listed coins (coin-launch-agent/sentiment.py)
+      const sd = JSON.parse(fs.readFileSync(path.join(require('os').homedir(), 'coin-launch-agent', 'data', 'sentiment', 'latest.json'), 'utf8'));
+      const toks = Object.entries(sd.tokens || {}).filter(([, t]) => t.score != null && Date.now() / 1000 - t.t < 3 * 3600).map(([k, t]) => ({ k, ...t }));
+      if (toks.length >= 6) {
+        toks.sort((a, b) => (b.rel != null ? b.rel : b.score) - (a.rel != null ? a.rel : a.score));
+        const row = (t) => ({ sym: { v: t.k, bold: true }, read: { v: `${t.label} ${t.score > 0 ? '+' : ''}${t.score}${t.talk ? ' · ' + t.talk : ''}${t.fomo && t.fomo.index >= 35 ? ' · FOMO ' + t.fomo.index : ''}`, tone: t.score >= 12 ? 'good' : t.score <= -12 ? 'bad' : 'neutral', bold: !!t.talk },
+          rel: t.rel != null ? `${t.rel > 0 ? '+' : ''}${t.rel}` : '', conf: t.confidence, src: t.sources.join(', ') });
+        const cols = [{ key: 'sym', label: 'Coin' }, { key: 'read', label: 'Social reading' }, { key: 'rel', label: 'vs typical', align: 'right' }, { key: 'conf', label: 'Confidence' }, { key: 'src', label: 'Sources' }];
+        secs.push({ title: `Social sentiment: ${toks.length} listed coins${sd.fear_greed ? ` · market mood ${sd.fear_greed.value} (${sd.fear_greed.label})` : ''}`,
+          note: 'Pump talk / dump talk from StockTwits crowd tags, news, Reddit, CoinGecko votes and Telegram. StockTwits skews bullish, so the ranking is against the typical coin. X/Twitter and Discord are not available free. A reading of talk, not a validated signal.',
+          blocks: [{ type: 'table', columns: cols, rows: toks.slice(0, 6).map(row) }, { type: 'table', columns: cols, rows: toks.slice(-6).reverse().map(row) }] });
+      }
+    } catch (e) { log('sentiment section failed: ' + e.message); }
     const held = ledger.open().prepare(`SELECT kind, sym, side, t, price FROM signals WHERE product='headless' AND source='live' AND emailed=0 AND t > ?
       AND (kind IN ('flip:STRONG','rally','gap:futures')) ORDER BY t`).all(since);
     heldSection = { title: `Held back: not proven enough for a real-time email (${held.length})`,
