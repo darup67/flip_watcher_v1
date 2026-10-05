@@ -1,7 +1,7 @@
 {
  "updated": "2026-10-05T10:21:57",
  "source": "Robinhood MCP get_currency_pairs: tradable, not display-only; coins halted only in some states are kept with halted_regions",
- "_refresh": "Refreshed monthly by the Claude scheduled task 'robinhood-crypto-refresh' (the MCP is only reachable from Claude sessions).",
+ "_refresh": "Refreshed monthly by the scheduled agent task 'robinhood-crypto-refresh' (the MCP is only reachable from agent sessions).",
  "coins": {
   "BILL": {
    "name": "Billions Network to US Dollar",

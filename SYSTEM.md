@@ -81,7 +81,7 @@ clears the runtime glitch because TradingView re-initializes from saved state.
 - **Audio output is unverified.** The alert commands succeed regardless of whether
   the sound is audible. Muted volume or a disconnected output device produces a
   successful-looking silent alert. Nothing in this stack can detect that.
-- **The daily check needs the Claude app open.** If it is closed at 08:38 the run
+- **The daily check needs the agent app open.** If it is closed at 08:38 the run
   happens at next launch, so a scheduler failure could go unnoticed for a while.
 - **Weekday schedule.** Deliberate: on weekends TradingView is often closed, and a
   daily BROKEN report you learn to ignore is worse than no report.

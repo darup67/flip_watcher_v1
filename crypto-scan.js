@@ -3,8 +3,8 @@
 // with the same signals as the stock/ETF watcher plus a bias score, wired into trade-core.
 //
 // Universe (rebuilt daily, crypto-universe.json):
-//   Robinhood  robinhood-crypto.json — from the Robinhood MCP (Claude-only; refreshed by a monthly
-//              Claude scheduled task). Coins halted only in some states are kept, with the states.
+//   Robinhood  robinhood-crypto.json — from the Robinhood MCP (agent-only; refreshed by a monthly
+//              scheduled agent task). Coins halted only in some states are kept, with the states.
 //   Coinbase   public Advanced Trade market API: USD spot pairs, online, >= $2M 24h volume.
 //   Wallet     GeckoTerminal top pools on Base and Solana: >= $1M liquidity, >= 7 days old, token not
 //              on an exchange above (brand-new launches are coin-launch-agent's job).
@@ -249,7 +249,7 @@ function email(xs) {
     lines: [`Evidence: ${Math.round(100 * x.evidence.win)}% net win vs ${Math.round(100 * (x.evidence.baseline || 0))}% for random entries (n=${x.evidence.n}, ${x.evidence.days} days).`,
             `Social sentiment: ${sentText(sentiment(x.s.name))}. It is a reading of what people are saying, not a validated signal.`,
             ...((sentiment(x.s.name) && sentiment(x.s.name).raw && sentiment(x.s.name).raw.news && sentiment(x.s.name).raw.news.top || []).slice(0, 1).map((h) => `Top headline: ${h}`)),
-            `Order ticket ${x.ticket.id} · ${x.ticket.account}. You place it yourself; ask Claude "check ticket ${x.ticket.id}" for live quotes.`] }));
+            `Order ticket ${x.ticket.id} · ${x.ticket.account}. You place it yourself; ask the agent "check ticket ${x.ticket.id}" for live quotes.`] }));
   UI.send(subject, {
     kind: 'Signal alert · Crypto', status: { text: `${xs.length} signal${xs.length > 1 ? 's' : ''}`, tone: 'info' },
     title: xs.length === 1 ? `${xs[0].s.name}: ${label(xs[0].kind).toLowerCase()}` : `${xs.length} crypto signals: ${names}`,

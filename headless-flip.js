@@ -30,7 +30,7 @@ const ledger = require(path.join(require('os').homedir(), 'trade-core', 'ledger.
 const assetOf = (tv) => { const g = (CFG.symbols.find((x) => x.tv === tv) || {}).group; return g === 'futures' ? 'future' : g === 'crypto' ? 'crypto' : 'stock'; };
 
 // Order tickets (#7): a ready-to-review plan for each real-time alert. Nothing is ever placed from here;
-// placing happens only when the user asks Claude ("place ticket T4K2A") and confirms a broker preview.
+// placing happens only when the user asks the agent ("place ticket T4K2A") and confirms a broker preview.
 function makeTicket(lid, { name, tv, side, price, stop, target }) {
   const risk = (CFG.tickets && CFG.tickets.riskUsd) || 100, asset = assetOf(tv), per = Math.abs(price - stop);
   let h = 0; for (const ch of lid) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -401,7 +401,7 @@ function rallyVol() { return (CFG.fvg && CFG.fvg.rallyVolX) || 2.5; }
 // Email layout: every email is built from a spec and rendered by email-ui.js (shared by all products).
 const UI = require('./email-ui.js');
 const ticketFields = (t) => [['Action', t.side], ['Size', t.qty ? `${t.qty} ${t.account.startsWith('futures') ? 'contract' : 'sh'}` : `$${t.notionalUsd}`], ['Limit', `~${t.entry}`], ['Stop', t.stop], ['Target', t.target], ['Risk', `≈ $${t.riskUsd}`]];
-const ticketNote = (t) => `Order ticket ${t.id} · ${t.account}. You place it yourself; ask Claude "check ticket ${t.id}" for live quotes.`;
+const ticketNote = (t) => `Order ticket ${t.id} · ${t.account}. You place it yourself; ask the agent "check ticket ${t.id}" for live quotes.`;
 const evidenceLine = (e) => (e ? `Evidence: ${Math.round(100 * e.win)}% net win vs ${Math.round(100 * (e.baseline || 0))}% for random entries (n=${e.n}${e.scope ? ', ' + e.scope : ''}${e.days ? ', ' + e.days + ' days' : ''}).` : null);
 
 function sendFvgEmail(fvgs) {

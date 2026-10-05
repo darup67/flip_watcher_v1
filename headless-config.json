@@ -477,7 +477,7 @@
  "gateByEvidence": true,
  "tickets": {
   "riskUsd": 100,
-  "_comment": "2026-09-28: suggested size in each order ticket = riskUsd / |entry - stop|. Tickets are never placed automatically; say \"place ticket <id>\" to Claude to get a broker preview you confirm."
+  "_comment": "2026-09-28: suggested size in each order ticket = riskUsd / |entry - stop|. Tickets are never placed automatically; say \"place ticket <id>\" to the agent to get a broker preview you confirm."
  },
  "_gate_comment": "2026-09-28 (user): real-time emails only for signal kinds PROVEN in trade-core's ledger (evidence.json); the rest wait for the 08:55 / 16:30 briefs.",
  "crypto": {
