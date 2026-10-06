@@ -565,6 +565,24 @@ async function matrix(send) {
           blocks: [{ type: 'table', columns: cols, rows: toks.slice(0, 6).map(row) }, { type: 'table', columns: cols, rows: toks.slice(-6).reverse().map(row) }] });
       }
     } catch (e) { log('sentiment section failed: ' + e.message); }
+    try {   // Jev memecoin desk (~/jev-desk), morning only: last 24 h from data/brief.json
+      const jd = isAM && JSON.parse(fs.readFileSync(path.join(require('os').homedir(), 'jev-desk', 'data', 'brief.json'), 'utf8'));
+      if (jd) {
+        const ageH = (Date.now() / 1000 - jd.t) / 3600, usd = (v) => `${v < 0 ? '−' : '+'}$${Math.abs(v).toFixed(2)}`;
+        const bits = [jd.held ? `Holding ${jd.held.ticker} (${jd.held.chain}) for ${jd.held.minutes} min` : 'Holding nothing',
+          `Top rejections: ${jd.rejections.length ? jd.rejections.map(([k, n]) => `${k.replace(/_/g, ' ')} ${n}`).join(', ') : 'none'}`,
+          `${jd.mode === 'live' ? 'Live' : 'Paper'} record: ${jd.closed_total} closed, ${jd.wins_total} won, ${usd(jd.pnl_total)}`,
+          `Jev: ${jd.jev_calls} calls, $${jd.jev_cost_usd.toFixed(4)}`];
+        if (jd.cycles_without_judge) bits.push(`${jd.cycles_without_judge} scans without Jev`);
+        if (!jd.trades.length && jd.picks.length) bits.push(`Last pick: ${jd.picks[jd.picks.length - 1]}`);
+        const blocks = [{ type: 'para', text: bits.join(' · ') + '.' }];
+        if (ageH > 2) blocks.unshift({ type: 'callout', tone: 'warn', text: `Desk summary is ${ageH.toFixed(0)} h old: the desk loop may be down (watchdog checks it).` });
+        if (jd.trades.length) blocks.push({ type: 'table', columns: [{ key: 'tk', label: 'Token' }, { key: 'st', label: 'Status' }, { key: 'tkt', label: 'Ticket', align: 'right' }, { key: 'pnl', label: 'P&L', align: 'right' }, { key: 'why', label: 'Exit' }],
+          rows: jd.trades.map((t) => ({ tk: { v: `${t.ticker} · ${t.chain}`, bold: true }, st: t.status.replace('shadow_', 'paper '), tkt: `$${(t.ticket || 0).toFixed(2)}`,
+            pnl: t.pnl == null ? '–' : { v: usd(t.pnl), tone: t.pnl >= 0 ? 'good' : 'bad' }, why: t.rule ? `${t.rule}${t.held_min != null ? `, ${t.held_min} min` : ''}` : '' })) });
+        secs.push({ title: `Jev desk (${jd.mode}): ${jd.cycles} scans, ${jd.judged} judged, ${jd.trades.length} trade${jd.trades.length === 1 ? '' : 's'} in 24h${jd.trades.length ? ` · ${usd(jd.pnl_window)}` : ''}`, blocks });
+      }
+    } catch (e) { if (e.code !== 'ENOENT') log('jev desk section failed: ' + e.message); }
     const held = ledger.open().prepare(`SELECT kind, sym, side, t, price FROM signals WHERE product='headless' AND source='live' AND emailed=0 AND t > ?
       AND (kind IN ('flip:STRONG','rally','gap:futures')) ORDER BY t`).all(since);
     heldSection = { title: `Held back: not proven enough for a real-time email (${held.length})`,
