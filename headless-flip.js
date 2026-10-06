@@ -573,7 +573,11 @@ async function matrix(send) {
         const jpos = jd.positions && jd.positions.length ? jd.positions : (jd.held ? [jd.held] : []);
         const bits = [jpos.length ? 'Holding ' + jpos.map((p) => `${p.ticker} (${p.chain}) ${p.minutes} min${p.pct != null ? ` ${p.pct >= 0 ? '+' : ''}${(100 * p.pct).toFixed(0)}%` : ''}`).join(', ') : 'Holding nothing',
           `Top rejections: ${jd.rejections.length ? jd.rejections.map(([k, n]) => `${k.replace(/_/g, ' ')} ${n}`).join(', ') : 'none'}`,
-          `${jd.mode === 'live' ? 'Live' : 'Paper'} record: ${jd.closed_total} closed, ${jd.wins_total} won, ${usd(jd.pnl_total)}`,
+          (() => { const p = jd.perf || {}, pc = (x) => (x == null ? '–' : `${x >= 0 ? '+' : ''}${(100 * x).toFixed(1)}%`);
+            return p.start_bank != null
+              ? `${jd.mode === 'live' ? 'Live' : 'Paper'} return ${pc(p.return_pct)} (${usd(p.realized_usd)} on $${p.start_bank.toFixed(2)}), equity ${pc(p.equity_return_pct)} incl. open · ` +
+                `${p.closed} closed, win rate ${p.win_rate == null ? '–' : Math.round(100 * p.win_rate) + '%'} · avg ${pc(p.avg_trade_pct)}/trade (wins ${pc(p.avg_win_pct)}, losses ${pc(p.avg_loss_pct)}) · max drawdown ${pc(p.max_drawdown_pct)}`
+              : `${jd.mode === 'live' ? 'Live' : 'Paper'} record: ${jd.closed_total} closed, ${jd.wins_total} won, ${usd(jd.pnl_total)}`; })(),
           `Jev: ${jd.jev_calls} calls, $${jd.jev_cost_usd.toFixed(4)}`];
         if (jd.cycles_without_judge) bits.push(`${jd.cycles_without_judge} scans without Jev`);
         if (!jd.trades.length && jd.picks.length) bits.push(`Last pick: ${jd.picks[jd.picks.length - 1]}`);
