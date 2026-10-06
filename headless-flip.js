@@ -570,7 +570,8 @@ async function matrix(send) {
       const jd = isAM ? jraw : (jraw.since_morning || jraw);
       if (jd) {
         const ageH = (Date.now() / 1000 - jd.t) / 3600, usd = (v) => `${v < 0 ? '−' : '+'}$${Math.abs(v).toFixed(2)}`;
-        const bits = [jd.held ? `Holding ${jd.held.ticker} (${jd.held.chain}) for ${jd.held.minutes} min` : 'Holding nothing',
+        const jpos = jd.positions && jd.positions.length ? jd.positions : (jd.held ? [jd.held] : []);
+        const bits = [jpos.length ? 'Holding ' + jpos.map((p) => `${p.ticker} (${p.chain}) ${p.minutes} min${p.pct != null ? ` ${p.pct >= 0 ? '+' : ''}${(100 * p.pct).toFixed(0)}%` : ''}`).join(', ') : 'Holding nothing',
           `Top rejections: ${jd.rejections.length ? jd.rejections.map(([k, n]) => `${k.replace(/_/g, ' ')} ${n}`).join(', ') : 'none'}`,
           `${jd.mode === 'live' ? 'Live' : 'Paper'} record: ${jd.closed_total} closed, ${jd.wins_total} won, ${usd(jd.pnl_total)}`,
           `Jev: ${jd.jev_calls} calls, $${jd.jev_cost_usd.toFixed(4)}`];
