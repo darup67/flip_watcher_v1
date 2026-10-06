@@ -565,8 +565,8 @@ async function matrix(send) {
           blocks: [{ type: 'table', columns: cols, rows: toks.slice(0, 6).map(row) }, { type: 'table', columns: cols, rows: toks.slice(-6).reverse().map(row) }] });
       }
     } catch (e) { log('sentiment section failed: ' + e.message); }
-    try {   // Jev memecoin desk (~/jev-desk), morning only: last 24 h from data/brief.json
-      const jd = isAM && JSON.parse(fs.readFileSync(path.join(require('os').homedir(), 'jev-desk', 'data', 'brief.json'), 'utf8'));
+    try {   // Jev memecoin desk (~/jev-desk), both briefs: last 24 h from data/brief.json
+      const jd = JSON.parse(fs.readFileSync(path.join(require('os').homedir(), 'jev-desk', 'data', 'brief.json'), 'utf8'));
       if (jd) {
         const ageH = (Date.now() / 1000 - jd.t) / 3600, usd = (v) => `${v < 0 ? '−' : '+'}$${Math.abs(v).toFixed(2)}`;
         const bits = [jd.held ? `Holding ${jd.held.ticker} (${jd.held.chain}) for ${jd.held.minutes} min` : 'Holding nothing',
