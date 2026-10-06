@@ -578,9 +578,11 @@ async function matrix(send) {
         if (!jd.trades.length && jd.picks.length) bits.push(`Last pick: ${jd.picks[jd.picks.length - 1]}`);
         const blocks = [{ type: 'para', text: bits.join(' · ') + '.' }];
         if (ageH > 2) blocks.unshift({ type: 'callout', tone: 'warn', text: `Desk summary is ${ageH.toFixed(0)} h old: the desk loop may be down (watchdog checks it).` });
-        if (jd.trades.length) blocks.push({ type: 'table', columns: [{ key: 'tk', label: 'Token' }, { key: 'st', label: 'Status' }, { key: 'tkt', label: 'Ticket', align: 'right' }, { key: 'pnl', label: 'P&L', align: 'right' }, { key: 'why', label: 'Exit' }],
-          rows: jd.trades.map((t) => ({ tk: { v: `${t.ticker} · ${t.chain}`, bold: true }, st: t.status.replace('shadow_', 'paper '), tkt: `$${(t.ticket || 0).toFixed(2)}`,
-            pnl: t.pnl == null ? '–' : { v: usd(t.pnl), tone: t.pnl >= 0 ? 'good' : 'bad' }, why: t.rule ? `${t.rule}${t.held_min != null ? `, ${t.held_min} min` : ''}` : '' })) });
+        const jst = { shadow_open: 'open', shadow_closed: 'closed', filled: 'open', closed: 'closed', pending_approval: 'awaiting approval', open: 'approved, buying' };
+        if (jd.trades.length) blocks.push({ type: 'table', columns: [{ key: 'tk', label: 'Token' }, { key: 'tr', label: jd.mode === 'live' ? 'Trade' : 'Paper trade' }, { key: 'pnl', label: 'P&L', align: 'right' }],
+          rows: jd.trades.map((t) => ({ tk: { v: t.ticker, bold: true },
+            tr: `${t.chain} · $${(t.ticket || 0).toFixed(0)} · ${jst[t.status] || t.status}${t.rule ? `: ${t.rule}${t.held_min != null ? `, ${t.held_min} min` : ''}` : ''}`,
+            pnl: t.pnl == null ? '–' : { v: usd(t.pnl), tone: t.pnl >= 0 ? 'good' : 'bad', bold: true } })) });
         secs.push({ title: `Jev desk (${jd.mode}): ${jd.cycles} scans, ${jd.judged} judged, ${jd.trades.length} trade${jd.trades.length === 1 ? '' : 's'} ${jd.window === 'since 08:55' ? 'since the morning brief' : 'in 24h'}${jd.trades.length ? ` · ${usd(jd.pnl_window)}` : ''}`, blocks });
       }
     } catch (e) { if (e.code !== 'ENOENT') log('jev desk section failed: ' + e.message); }
