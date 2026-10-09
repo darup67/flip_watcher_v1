@@ -171,7 +171,7 @@ function send(subject, spec, opts = {}) {
   const { html, text } = render(spec);
   const tmp = path.join(os.tmpdir(), `email-${process.pid}-${Date.now()}.txt`);
   fs.writeFileSync(tmp, text);
-  const env = { ...process.env, SEND_EMAIL_HTML: '1', SEND_EMAIL_TEXT_FILE: tmp, SEND_EMAIL_TIMEOUT_MS: String(opts.timeoutMs || 35000) };
+  const env = { ...process.env, ...(opts.to ? { SEND_EMAIL_TO: String(opts.to) } : {}), SEND_EMAIL_HTML: '1', SEND_EMAIL_TEXT_FILE: tmp, SEND_EMAIL_TIMEOUT_MS: String(opts.timeoutMs || 35000) };
   if (!env.FLIP_GMAIL_APP_PASSWORD) env.FLIP_GMAIL_APP_PASSWORD = execFileSync('/usr/bin/security', ['find-generic-password', '-a', 'darup67@gmail.com', '-s', 'flip-notifier-gmail', '-w']).toString().trim();
   try {
     execFileSync(process.execPath, [path.join(__dirname, 'send-email.js'), subject, html], { env, timeout: (opts.timeoutMs || 35000) + 5000, stdio: 'ignore' });

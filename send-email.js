@@ -17,6 +17,9 @@ const dns = require('dns');
 
 const GMAIL_USER = 'darup67@gmail.com';
 const APP_PASSWORD = process.env.FLIP_GMAIL_APP_PASSWORD;
+// Optional recipients (comma list, via email-ui.js opts.to). Unset = the owner only, as before. Each address is validated; anything odd is dropped.
+const TO_LIST = (process.env.SEND_EMAIL_TO || '').split(',').map(s => s.trim()).filter(s => /^[^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+$/.test(s));
+const RECIPIENTS = TO_LIST.length ? TO_LIST : [GMAIL_USER];
 if (!APP_PASSWORD) { process.stderr.write('FLIP_GMAIL_APP_PASSWORD not set\n'); process.exit(1); }
 
 const [,, subject, body] = process.argv;
@@ -45,7 +48,7 @@ function buildMessage() {
   // Subject is RFC 2047 encoded, bodies are base64: robust for emoji, long HTML lines and SMTP dot rules.
   const head = [
     `From: Flip Watcher <${GMAIL_USER}>`,
-    `To: ${GMAIL_USER}`,
+    `To: ${RECIPIENTS.join(', ')}`,
     `Subject: =?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`,
     `Date: ${new Date().toUTCString()}`,
     'MIME-Version: 1.0',
@@ -73,7 +76,7 @@ function attempt(retryNum) {
       'EHLO flipnotifier',
       `AUTH PLAIN ${Buffer.from(`\0${GMAIL_USER}\0${APP_PASSWORD}`).toString('base64')}`,
       `MAIL FROM:<${GMAIL_USER}>`,
-      `RCPT TO:<${GMAIL_USER}>`,
+      ...RECIPIENTS.map(a => `RCPT TO:<${a}>`),
       'DATA',
       `${msg}\r\n.`,
       'QUIT',
