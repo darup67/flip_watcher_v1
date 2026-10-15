@@ -40,7 +40,7 @@ const TONE = {
   neutral: { fg: '#374151', bg: '#e5e7eb', solid: '#6b7280' },
 };
 const tone = (t) => TONE[t] || TONE.neutral;
-const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif";
+const FONT = "-apple-system,'Segoe UI',Helvetica,Arial,sans-serif";
 const MONO = "ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
 const esc = (x) => String(x == null ? '' : x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const cellObj = (c) => (c && typeof c === 'object' && !Array.isArray(c) ? c : { v: c });

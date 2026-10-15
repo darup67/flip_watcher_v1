@@ -527,6 +527,7 @@ async function matrix(send) {
     }
     const ev = JSON.parse(fs.readFileSync(ledger.EVIDENCE, 'utf8'));
     const evRows = Object.entries(ev.groups).map(([k, v]) => [k, v['*']]).sort((a, b) => (b[1].proven - a[1].proven) || b[1].n - a[1].n)
+      .filter((r, i, a) => r.sig && (a.some((x) => x.verdict.tone === 'good') ? r.verdict.tone === 'good' : i < 3)).slice(0, 6)      // 2026-10-14: proven signals only (or the top 3 if none) (this table alone was 26 KB)
       .map(([k, r]) => ({ sig: { v: k.replace('|', ' · '), bold: true }, n: String(r.n), win: pc(r.win), rnd: pc(r.baseline), net: r.meanNet == null ? '–' : (100 * r.meanNet).toFixed(2) + '%',
         verdict: { v: r.proven ? 'PROVEN: real-time email' : 'brief only', tone: r.proven ? 'good' : 'neutral', bold: !!r.proven } }));
     evidenceSection = { title: `Evidence: which signals earn a real-time email (last ${ev.windowDays} days, after costs)`,
@@ -548,9 +549,10 @@ async function matrix(send) {
       const csig = ledger.open().prepare(`SELECT kind, sym, t, price, emailed FROM signals WHERE product='crypto' AND source='live' AND t > ? ORDER BY t`).all(since);
       cryptoSection = { title: `Crypto: ${cs.counts.ok} coins on Coinbase and Robinhood · BTC 24h ${cs.btc24 == null ? '–' : (100 * cs.btc24).toFixed(1) + '%'}`,
         note: 'Bias score runs −100 to +100 (SuperTrend on 15m/1h/4h, EMA stack, RSI, strength vs BTC, volume). It is context only: in testing it did not predict the next 24 hours.',
-        blocks: [{ type: 'chipRows', items: [{ label: 'Highest bias', chips: cs.board.slice(0, 12).map(chip) }, { label: 'Lowest bias', chips: cs.board.slice(-8).reverse().map(chip) }] },
-          { type: 'table', empty: 'No crypto signals since the last brief.', columns: [{ key: 't', label: 'When' }, { key: 'c', label: 'Coin' }, { key: 'k', label: 'Signal' }, { key: 'p', label: 'Price', align: 'right' }, { key: 'e', label: 'Emailed' }],
-            rows: csig.map((x) => ({ t: hm(x.t), c: { v: x.sym.split(':')[1], bold: true }, k: x.kind, p: px(x.price), e: x.emailed ? { v: 'yes', tone: 'good' } : 'held for brief' })) }] };
+        blocks: [{ type: 'chipRows', items: [{ label: 'Highest bias', chips: cs.board.slice(0, 8).map(chip) }, { label: 'Lowest bias', chips: cs.board.slice(-5).reverse().map(chip) }] },
+          { type: 'table', empty: 'No crypto signals since the last brief.', // newest 8 only
+             columns: [{ key: 't', label: 'When' }, { key: 'c', label: 'Coin' }, { key: 'k', label: 'Signal' }, { key: 'p', label: 'Price', align: 'right' }, { key: 'e', label: 'Emailed' }],
+            rows: csig.slice(-8).map((x) => ({ t: hm(x.t), c: { v: x.sym.split(':')[1], bold: true }, k: x.kind, p: px(x.price), e: x.emailed ? { v: 'yes', tone: 'good' } : 'held for brief' })) }] };
     }
     try {   // social sentiment among the listed coins (coin-launch-agent/sentiment.py)
       const sd = JSON.parse(fs.readFileSync(path.join(require('os').homedir(), 'coin-launch-agent', 'data', 'sentiment', 'latest.json'), 'utf8'));
@@ -562,7 +564,7 @@ async function matrix(send) {
         const cols = [{ key: 'sym', label: 'Coin' }, { key: 'read', label: 'Social reading' }, { key: 'rel', label: 'vs typical', align: 'right' }, { key: 'conf', label: 'Confidence' }, { key: 'src', label: 'Sources' }];
         secs.push({ title: `Social sentiment: ${toks.length} listed coins${sd.fear_greed ? ` · market mood ${sd.fear_greed.value} (${sd.fear_greed.label})` : ''}`,
           note: 'Pump talk / dump talk from StockTwits crowd tags, news, Reddit, CoinGecko votes and Telegram. StockTwits skews bullish, so the ranking is against the typical coin. X/Twitter and Discord are not available free. A reading of talk, not a validated signal.',
-          blocks: [{ type: 'table', columns: cols, rows: toks.slice(0, 6).map(row) }, { type: 'table', columns: cols, rows: toks.slice(-6).reverse().map(row) }] });
+          blocks: [{ type: 'table', columns: cols, rows: toks.slice(0, 3).map(row) }, { type: 'table', columns: cols, rows: toks.slice(-3).reverse().map(row) }] });
       }
     } catch (e) { log('sentiment section failed: ' + e.message); }
     try {   // Jev memecoin desk (~/jev-desk) from data/brief.json: morning = last 24 h, closing = since 08:55
@@ -603,9 +605,9 @@ async function matrix(send) {
     scoreSection = { title: `Scoreboard: what happened after past signals (since ${st.from.slice(0, 10)})`,
       note: '"Right" = price moved in the signal\'s direction (BUY/bull long, SELL/bear short). Held = came back into the gap without closing through it. Before fees. History, not advice.',
       blocks: [{ type: 'table', columns: [{ key: 'k', label: 'Trend flips' }, { key: 'n', label: 'n', align: 'right' }, { key: 'r4', label: 'Right after 4h', align: 'right' }, { key: 'r24', label: 'Right after 24h', align: 'right' }],
-          rows: Object.entries(st.flips).map(([k, v]) => ({ k: { v: k, bold: true }, n: String(v.n), r4: pc(v['4h'].right), r24: { v: pc(v['24h'].right), bold: true } })) },
+          rows: Object.entries(st.flips).slice(0, 4).map(([k, v]) => ({ k: { v: k, bold: true }, n: String(v.n), r4: pc(v['4h'].right), r24: { v: pc(v['24h'].right), bold: true } })) },
         { type: 'table', columns: [{ key: 'k', label: 'Tradable gaps' }, { key: 'n', label: 'n', align: 'right' }, { key: 'tested', label: 'Tested in 24h', align: 'right' }, { key: 'held', label: 'Held', align: 'right' }, { key: 'r24', label: 'Right after 24h', align: 'right' }, { key: 'r21', label: '2:1 rally', align: 'right' }],
-          rows: Object.entries(st.gaps).map(([k, v]) => ({ k: { v: k, bold: true }, n: String(v.n), tested: pc(v.tested), held: { v: pc(v.held), bold: true }, r24: pc(v['24h'].right), r21: pc(v.rally21) })) }] };
+          rows: Object.entries(st.gaps).slice(0, 4).map(([k, v]) => ({ k: { v: k, bold: true }, n: String(v.n), tested: pc(v.tested), held: { v: pc(v.held), bold: true }, r24: pc(v['24h'].right), r21: pc(v.rally21) })) }] };
   } catch (e) { log('scoreboard failed: ' + e.message); }
 
   const when = et(Date.now(), { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -622,7 +624,8 @@ async function matrix(send) {
   const emailMode = CFG.flipsEmailConfluence && CFG.minScore > 5 ? 'confluence only' : CFG.minScore >= 4 ? 'STRONG only' : 'MODERATE and STRONG';
   const spec = {
     kind: isAM ? 'Morning brief' : 'Closing brief', status: { text: `${buys} BUY · ${sells} SELL`, tone: buys >= sells ? 'good' : 'bad' },
-    title: `${isAM ? 'Morning' : 'Closing'} Brief: Trend Matrix, Gaps and Signals for ${ok.length} Tickers`,
+    title: `${isAM ? 'Morning' : 'Closing'} Brief · ${ok.length} tickers`,
+    tldr: [`${buys} BUY / ${sells} SELL across ${ok.length} tickers.`, `${changes.length} trend flip${changes.length === 1 ? '' : 's'} and ${gaps.length} gap/rally signal${gaps.length === 1 ? '' : 's'} since the last report` + (actCount == null ? '.' : `, ${actCount} actionable spread${actCount === 1 ? '' : 's'} today.`)],
     subtitle: `${when} ET · stocks, ETFs, futures and crypto`,
     sections, footer: `Real-time flip emails: ${emailMode}. Sent by the Headless Flip Watcher.`,
   };
