@@ -57,32 +57,32 @@ function linkList(links) {
 function block(b) {
   switch (b.type) {
     case 'kpis': {
-      const n = b.items.length;
-      return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:6px 0;margin:0 -6px"><tr>` + b.items.map((k) => {
+      const n = b.items.length, per = Math.min(n, 4), w = Math.floor(100 / per) - 2;
+      return `<div style="font-size:0;line-height:0">` + b.items.map((k) => {
         const c = k.tone ? tone(k.tone) : null;
-        return `<td width="${Math.floor(100 / n)}%" valign="top" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px">` +
-          `<div style="font:600 10px ${FONT};letter-spacing:.8px;text-transform:uppercase;color:#6b7280">${esc(k.label)}</div>` +
-          `<div style="font:700 20px ${FONT};color:${c ? c.solid : '#111827'};margin-top:2px">${esc(k.value)}</div>` +
-          (k.sub ? `<div style="font:12px ${FONT};color:#6b7280;margin-top:1px">${esc(k.sub)}</div>` : '') + `</td>`;
-      }).join('') + `</tr></table>`;
+        return `<div style="display:inline-block;vertical-align:top;width:${w}%;min-width:110px;box-sizing:border-box;margin:0 1.5% 8px 0;background:#f9fafb;border:1px solid #eceef1;border-radius:12px;padding:11px 13px">` +
+          `<div style="font:600 10.5px ${FONT};letter-spacing:.6px;text-transform:uppercase;color:#6b7280;line-height:1.3">${esc(k.label)}</div>` +
+          `<div style="font:700 21px/1.25 ${FONT};color:${c ? c.solid : '#111827'};margin-top:3px">${esc(k.value)}</div>` +
+          (k.sub ? `<div style="font:12px/1.35 ${FONT};color:#6b7280;margin-top:2px">${esc(k.sub)}</div>` : '') + `</div>`;
+      }).join('') + `</div>`;
     }
     case 'table': {
       if (!b.rows || !b.rows.length) return `<div style="font:13px ${FONT};color:#6b7280;padding:6px 0">${esc(b.empty || 'None.')}</div>`;
-      const head = b.noHeader ? '' : b.columns.map((c) => `<th align="${c.align || 'left'}" style="padding:7px 10px;font:600 10px ${FONT};letter-spacing:.7px;text-transform:uppercase;color:#6b7280;border-bottom:2px solid #e5e7eb;white-space:nowrap">${esc(c.label)}</th>`).join('');
+      const head = b.noHeader ? '' : b.columns.map((c) => `<th align="${c.align || 'left'}" style="padding:6px 10px 7px;font:600 10.5px ${FONT};letter-spacing:.6px;text-transform:uppercase;color:#6b7280;border-bottom:1px solid #eceef1;white-space:nowrap">${esc(c.label)}</th>`).join('');
       const body = b.rows.map((r) => `<tr>` + b.columns.map((c) => {
         const o = cellObj(r[c.key]);
         const col = o.tone ? tone(o.tone).fg : '#111827';
         const inner = o.href ? `<a href="${esc(o.href)}" style="color:#1d4ed8;text-decoration:none">${esc(o.v)}</a>` : esc(o.v);
-        return `<td align="${c.align || 'left'}" valign="top" style="padding:8px 10px;font:${o.bold ? 700 : 400} 13px ${FONT};color:${col};border-bottom:1px solid #f0f1f3">${inner}</td>`;
+        return `<td align="${c.align || 'left'}" valign="top" style="padding:9px 10px;font:${o.bold ? 650 : 400} 13.5px/1.4 ${FONT};color:${col};border-bottom:1px solid #f2f3f5">${inner}</td>`;
       }).join('') + `</tr>`).join('');
-      return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse">${head ? `<tr>${head}</tr>` : ''}${body}</table>`;
+      return `<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse">${head ? `<tr>${head}</tr>` : ''}${body}</table></div>`;
     }
     case 'cards':
       return b.items.map((c) => {
         const t = c.badge ? tone(c.badge.tone) : tone('neutral');
         const fields = (c.fields || []).length ? `<table role="presentation" cellspacing="0" cellpadding="0" style="margin-top:8px"><tr>` + c.fields.map(([l, v]) =>
           `<td style="padding:0 18px 4px 0" valign="top"><div style="font:600 10px ${FONT};letter-spacing:.7px;text-transform:uppercase;color:#6b7280">${esc(l)}</div><div style="font:600 14px ${MONO};color:#111827">${esc(v)}</div></td>`).join('') + `</tr></table>` : '';
-        return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e5e7eb;border-radius:10px;margin:0 0 10px;border-collapse:separate"><tr><td style="padding:12px 14px">` +
+        return `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #eceef1;border-radius:12px;margin:0 0 10px;border-collapse:separate"><tr><td style="padding:12px 14px">` +
           `<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td style="font:700 17px ${FONT};color:#111827">${esc(c.title)}</td>` +
           (c.badge ? `<td align="right">${pill(c.badge.text, c.badge.tone, true)}</td>` : '') + `</tr></table>` +
           (c.sub ? `<div style="font:13px ${FONT};color:#4b5563;margin-top:2px">${esc(c.sub)}</div>` : '') + fields +
@@ -101,7 +101,7 @@ function block(b) {
     case 'code':
       return `<pre style="margin:0;padding:10px 12px;background:#f3f4f6;border-radius:8px;font:12px/1.5 ${MONO};color:#374151;white-space:pre-wrap;word-break:break-word">${esc(b.text)}</pre>`;
     case 'para':
-      return `<p style="margin:0 0 8px;font:14px/1.55 ${FONT};color:#374151">${esc(b.text)}</p>`;
+      return `<p style="margin:0 0 8px;font:14px/1.5 ${FONT};color:#374151">${esc(b.text)}</p>`;
     case 'callout': {
       const c = tone(b.tone || 'info');
       return `<div style="background:${c.bg};color:${c.fg};border-radius:8px;padding:10px 14px;font:13px/1.5 ${FONT}">${esc(b.text)}</div>`;
@@ -113,28 +113,46 @@ function block(b) {
   }
 }
 
+const firstSentence = (t, max) => {
+  t = String(t || '').trim();
+  if (t.length <= max) return t;
+  const m = t.slice(0, max + 40).match(/^(.{40,}?[.!?])(\s|$)/);
+  return m && m[1].length <= max + 40 ? m[1] : t.slice(0, max).replace(/\s+\S*$/, '') + '…';
+};
+
+const DARK_CSS = `@media (prefers-color-scheme: dark){body,.pg{background:#0b0d10!important}
+[style*="background:#ffffff"]{background:#14171c!important}[style*="background:#f3f4f6"]{background:#0b0d10!important}[style*="background:#f9fafb"]{background:#1a1e24!important}
+[style*="color:#111827"]{color:#e8eaee!important}[style*="color:#374151"],[style*="color:#4b5563"]{color:#b8bec9!important}[style*="color:#6b7280"],[style*="color:#9ca3af"]{color:#8b93a1!important}
+[style*="border:1px solid #eceef1"],[style*="border:1px solid #e5e7eb"]{border-color:#262a31!important}[style*="border-bottom:1px solid #f2f3f5"],[style*="border-bottom:1px solid #eceef1"],[style*="border-top:1px solid #eceef1"]{border-color:#23272e!important}
+[style*="background:#eef0f3"]{background:#23272e!important}}
+@media (max-width:620px){.pad{padding-left:16px!important;padding-right:16px!important}}`;
+
 function render(spec) {
   const st = spec.status ? pill(spec.status.text, spec.status.tone, true) : '';
-  const sections = (spec.sections || []).map((s) => `<tr><td style="padding:20px 24px 4px">` +
-    (s.title ? `<div style="font:700 12px ${FONT};letter-spacing:1px;text-transform:uppercase;color:#111827;border-bottom:1px solid #e5e7eb;padding-bottom:6px;margin-bottom:10px">${esc(s.title)}</div>` : '') +
-    (s.note ? `<div style="font:12px/1.5 ${FONT};color:#6b7280;margin:-4px 0 10px">${esc(s.note)}</div>` : '') +
+  const tl = spec.tldr ? [].concat(spec.tldr).filter(Boolean) : [];
+  const tldr = tl.length ? `<tr><td class="pad" style="padding:18px 24px 4px"><div style="background:#f9fafb;border:1px solid #eceef1;border-radius:12px;padding:12px 16px">` +
+    tl.map((t, i) => `<div style="font:${i === 0 ? '600 16px/1.45' : '14px/1.5'} ${FONT};color:${i === 0 ? '#111827' : '#374151'};${i ? 'margin-top:4px' : ''}">${esc(t)}</div>`).join('') + `</div></td></tr>` : '';
+  const sections = (spec.sections || []).map((s) => `<tr><td class="pad" style="padding:22px 24px 2px">` +
+    (s.title ? `<div style="font:700 15px/1.3 ${FONT};color:#111827;margin-bottom:${s.note ? 2 : 10}px">${esc(s.title)}</div>` : '') +
+    (s.note ? `<div style="font:12.5px/1.5 ${FONT};color:#6b7280;margin:0 0 10px">${esc(firstSentence(s.note, 150))}</div>` : '') +
     (s.blocks || []).map((b) => `<div style="margin-bottom:10px">${block(b)}</div>`).join('') + `</td></tr>`).join('');
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light"><title>${esc(spec.title)}</title></head>` +
-    `<body style="margin:0;padding:0;background:#f3f4f6"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6"><tr><td align="center" style="padding:20px 10px">` +
-    `<table role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;background:#ffffff;border:1px solid #e5e7eb;border-radius:12px;border-collapse:separate;overflow:hidden">` +
-    `<tr><td style="background:#111827;padding:20px 24px 18px">` +
-    `<div style="font:700 11px ${FONT};letter-spacing:1.6px;text-transform:uppercase;color:#9ca3af">${esc(spec.kind || 'Notification')}${st ? `&nbsp;&nbsp;${st}` : ''}</div>` +
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><title>${esc(spec.title)}</title><style>${DARK_CSS}</style></head>` +
+    `<body style="margin:0;padding:0;background:#f3f4f6"><table class="pg" role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f3f4f6"><tr><td align="center" style="padding:16px 10px 28px">` +
+    `<table role="presentation" width="640" cellspacing="0" cellpadding="0" style="width:100%;max-width:640px;background:#ffffff;border:1px solid #eceef1;border-radius:16px;border-collapse:separate;overflow:hidden">` +
+    `<tr><td class="pad" style="background:#0f172a;padding:20px 24px 18px">` +
+    `<div style="font:700 11px ${FONT};letter-spacing:1.4px;text-transform:uppercase;color:#9ca3af">${esc(spec.kind || 'Notification')}${st ? `&nbsp;&nbsp;${st}` : ''}</div>` +
     `<div style="font:700 22px/1.25 ${FONT};color:#ffffff;margin-top:8px">${esc(spec.title)}</div>` +
-    (spec.subtitle ? `<div style="font:13px/1.45 ${FONT};color:#d1d5db;margin-top:6px">${esc(spec.subtitle)}</div>` : '') + `</td></tr>` +
-    sections +
-    `<tr><td style="padding:18px 24px 22px"><div style="border-top:1px solid #e5e7eb;padding-top:12px;font:11px/1.55 ${FONT};color:#9ca3af">` +
-    (spec.footer ? esc(spec.footer) + '<br>' : '') + `Automated email from your trading ecosystem on this Mac. Market data can be delayed or wrong. Not investment advice.</div></td></tr>` +
+    (spec.subtitle ? `<div style="font:13px/1.45 ${FONT};color:#cbd5e1;margin-top:5px">${esc(firstSentence(spec.subtitle, 160))}</div>` : '') + `</td></tr>` +
+    tldr + sections +
+    `<tr><td class="pad" style="padding:20px 24px 20px"><div style="border-top:1px solid #eceef1;padding-top:12px;font:11px/1.5 ${FONT};color:#9ca3af">` +
+    (spec.footer ? esc(firstSentence(spec.footer, 140)) + ' · ' : '') + `Not investment advice.</div></td></tr>` +
     `</table></td></tr></table></body></html>`;
   return { html, text: renderText(spec) };
 }
 
 function renderText(spec) {
   const out = [`${(spec.kind || '').toUpperCase()}${spec.status ? `  [${spec.status.text}]` : ''}`, spec.title, spec.subtitle || '', ''];
+  if (spec.tldr) out.push(...[].concat(spec.tldr).filter(Boolean), '');
   for (const s of spec.sections || []) {
     if (s.title) out.push(`== ${s.title.toUpperCase()} ==`);
     if (s.note) out.push(s.note);
