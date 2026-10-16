@@ -1,10 +1,10 @@
 {
- "updated": "2026-10-15T17:21:33.408Z",
+ "updated": "2026-10-16T13:36:33.309Z",
  "counts": {
   "robinhood": 88,
-  "coinbase": 97,
-  "wallet": 2,
-  "total": 105
+  "coinbase": 91,
+  "wallet": 1,
+  "total": 98
  },
  "symbols": [
   {
@@ -18,7 +18,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 4855584,
+   "usdVol24h": 4644705,
    "signals": true
   },
   {
@@ -32,7 +32,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 15143142,
+   "usdVol24h": 8940625,
    "signals": false
   },
   {
@@ -46,7 +46,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 6599414,
+   "usdVol24h": 2126719,
    "signals": true
   },
   {
@@ -60,7 +60,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 10023452,
+   "usdVol24h": 10290999,
    "signals": true
   },
   {
@@ -74,7 +74,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 1281880,
+   "usdVol24h": 1502122,
    "signals": true
   },
   {
@@ -88,7 +88,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 2940230,
+   "usdVol24h": 4000400,
    "signals": true
   },
   {
@@ -104,7 +104,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 659575,
+   "usdVol24h": 417727,
    "signals": true
   },
   {
@@ -118,7 +118,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 1224445,
+   "usdVol24h": 590579,
    "signals": true
   },
   {
@@ -132,7 +132,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 8047643,
+   "usdVol24h": 7864517,
    "signals": true
   },
   {
@@ -148,7 +148,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 897183,
+   "usdVol24h": 467678,
    "signals": true
   },
   {
@@ -162,7 +162,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 248803,
+   "usdVol24h": 88962,
    "signals": true
   },
   {
@@ -176,7 +176,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 1321775,
+   "usdVol24h": 2932119,
    "signals": true
   },
   {
@@ -190,7 +190,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 2811505,
+   "usdVol24h": 1803354,
    "signals": true
   },
   {
@@ -206,7 +206,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 912118,
+   "usdVol24h": 1136894,
    "signals": true
   },
   {
@@ -220,7 +220,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 98925,
+   "usdVol24h": 57881,
    "signals": true
   },
   {
@@ -236,7 +236,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 1410488,
+   "usdVol24h": 1011763,
    "signals": false
   },
   {
@@ -250,7 +250,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 2807317,
+   "usdVol24h": 1688948,
    "signals": true
   },
   {
@@ -264,7 +264,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 618230443,
+   "usdVol24h": 448292467,
    "signals": false
   },
   {
@@ -310,7 +310,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 1258130,
+   "usdVol24h": 1571697,
    "signals": true
   },
   {
@@ -324,7 +324,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 256424,
+   "usdVol24h": 169142,
    "signals": true
   },
   {
@@ -338,7 +338,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 3300412,
+   "usdVol24h": 2686285,
    "signals": true
   },
   {
@@ -352,7 +352,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 14191513,
+   "usdVol24h": 9207133,
    "signals": true
   },
   {
@@ -366,21 +366,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 2429838,
-   "signals": true
-  },
-  {
-   "tv": "CRYPTO:DRV",
-   "name": "DRV",
-   "group": "crypto",
-   "source": "coinbase",
-   "ticker": "DRV-USD",
-   "venues": {
-    "robinhood": false,
-    "coinbase": true,
-    "haltedIn": []
-   },
-   "usdVol24h": 2003980,
+   "usdVol24h": 3509740,
    "signals": true
   },
   {
@@ -396,7 +382,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 956467,
+   "usdVol24h": 1212207,
    "signals": true
   },
   {
@@ -410,7 +396,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 7583059,
+   "usdVol24h": 8146142,
    "signals": true
   },
   {
@@ -424,7 +410,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 1082866,
+   "usdVol24h": 551962,
    "signals": true
   },
   {
@@ -438,22 +424,8 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 373284037,
+   "usdVol24h": 217928061,
    "signals": false
-  },
-  {
-   "tv": "CRYPTO:FARTCOIN",
-   "name": "FARTCOIN",
-   "group": "crypto",
-   "source": "coinbase",
-   "ticker": "FARTCOIN-USD",
-   "venues": {
-    "robinhood": false,
-    "coinbase": true,
-    "haltedIn": []
-   },
-   "usdVol24h": 2932102,
-   "signals": true
   },
   {
    "tv": "CRYPTO:FET",
@@ -466,7 +438,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 5924641,
+   "usdVol24h": 4102076,
    "signals": true
   },
   {
@@ -480,7 +452,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 3263186,
+   "usdVol24h": 5110412,
    "signals": true
   },
   {
@@ -496,7 +468,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 151862,
+   "usdVol24h": 93399,
    "signals": true
   },
   {
@@ -510,7 +482,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 561882,
+   "usdVol24h": 324592,
    "signals": true
   },
   {
@@ -540,7 +512,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 497975,
+   "usdVol24h": 283810,
    "signals": true
   },
   {
@@ -554,7 +526,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 8248645,
+   "usdVol24h": 6559338,
    "signals": true
   },
   {
@@ -570,7 +542,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 34532563,
+   "usdVol24h": 23637256,
    "signals": false
   },
   {
@@ -584,7 +556,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 3131493,
+   "usdVol24h": 2768928,
    "signals": true
   },
   {
@@ -598,7 +570,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 527258,
+   "usdVol24h": 282696,
    "signals": true
   },
   {
@@ -612,7 +584,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 4776261,
+   "usdVol24h": 14516870,
    "signals": true
   },
   {
@@ -628,21 +600,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 1464591,
-   "signals": true
-  },
-  {
-   "tv": "CRYPTO:KAIO",
-   "name": "KAIO",
-   "group": "crypto",
-   "source": "coinbase",
-   "ticker": "KAIO-USD",
-   "venues": {
-    "robinhood": false,
-    "coinbase": true,
-    "haltedIn": []
-   },
-   "usdVol24h": 2085372,
+   "usdVol24h": 738776,
    "signals": true
   },
   {
@@ -656,7 +614,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 349443,
+   "usdVol24h": 382028,
    "signals": true
   },
   {
@@ -670,7 +628,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 5511893,
+   "usdVol24h": 4445435,
    "signals": true
   },
   {
@@ -684,7 +642,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 12906858,
+   "usdVol24h": 8656334,
    "signals": false
   },
   {
@@ -714,7 +672,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 8517917,
+   "usdVol24h": 6455221,
    "signals": true
   },
   {
@@ -730,7 +688,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 1114574,
+   "usdVol24h": 802084,
    "signals": true
   },
   {
@@ -774,7 +732,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 3510617,
+   "usdVol24h": 2199087,
    "signals": true
   },
   {
@@ -790,7 +748,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 119387,
+   "usdVol24h": 54080,
    "signals": true
   },
   {
@@ -804,7 +762,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 916501,
+   "usdVol24h": 481688,
    "signals": true
   },
   {
@@ -818,7 +776,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 64295988,
+   "usdVol24h": 68417637,
    "signals": false
   },
   {
@@ -834,7 +792,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 8508532,
+   "usdVol24h": 6907062,
    "signals": true
   },
   {
@@ -848,7 +806,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 2034976,
+   "usdVol24h": 1289376,
    "signals": true
   },
   {
@@ -862,7 +820,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 591618,
+   "usdVol24h": 349910,
    "signals": true
   },
   {
@@ -878,7 +836,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 1564789,
+   "usdVol24h": 1475345,
    "signals": true
   },
   {
@@ -894,7 +852,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 2080695,
+   "usdVol24h": 1163561,
    "signals": true
   },
   {
@@ -908,7 +866,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 3644735,
+   "usdVol24h": 2931124,
    "signals": true
   },
   {
@@ -924,21 +882,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 72212,
-   "signals": true
-  },
-  {
-   "tv": "CRYPTO:PONS",
-   "name": "PONS",
-   "group": "crypto",
-   "source": "coinbase",
-   "ticker": "PONS-USD",
-   "venues": {
-    "robinhood": false,
-    "coinbase": true,
-    "haltedIn": []
-   },
-   "usdVol24h": 2028356,
+   "usdVol24h": 51069,
    "signals": true
   },
   {
@@ -954,7 +898,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 145221,
+   "usdVol24h": 120246,
    "signals": true
   },
   {
@@ -968,7 +912,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 9109287,
+   "usdVol24h": 5900773,
    "signals": true
   },
   {
@@ -982,7 +926,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 5183679,
+   "usdVol24h": 5071147,
    "signals": true
   },
   {
@@ -996,7 +940,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 21684510,
+   "usdVol24h": 15410997,
    "signals": true
   },
   {
@@ -1010,7 +954,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 2395539,
+   "usdVol24h": 1659550,
    "signals": true
   },
   {
@@ -1026,7 +970,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 174174,
+   "usdVol24h": 70197,
    "signals": true
   },
   {
@@ -1040,7 +984,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 2304232,
+   "usdVol24h": 2145123,
    "signals": true
   },
   {
@@ -1054,7 +998,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 1112367,
+   "usdVol24h": 1166148,
    "signals": true
   },
   {
@@ -1070,7 +1014,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 404489,
+   "usdVol24h": 630986,
    "signals": true
   },
   {
@@ -1084,7 +1028,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 663450,
+   "usdVol24h": 384925,
    "signals": true
   },
   {
@@ -1098,7 +1042,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 211376,
+   "usdVol24h": 306994,
    "signals": true
   },
   {
@@ -1114,7 +1058,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 360634,
+   "usdVol24h": 240596,
    "signals": true
   },
   {
@@ -1130,7 +1074,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 171055,
+   "usdVol24h": 103979,
    "signals": true
   },
   {
@@ -1144,7 +1088,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 97352179,
+   "usdVol24h": 64694194,
    "signals": false
   },
   {
@@ -1158,7 +1102,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 22171735,
+   "usdVol24h": 17044112,
    "signals": true
   },
   {
@@ -1172,7 +1116,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 24182265,
+   "usdVol24h": 17941542,
    "signals": true
   },
   {
@@ -1186,7 +1130,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 2167347,
+   "usdVol24h": 981222,
    "signals": true
   },
   {
@@ -1200,7 +1144,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 8946226,
+   "usdVol24h": 9178419,
    "signals": true
   },
   {
@@ -1214,7 +1158,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 2069135,
+   "usdVol24h": 3750777,
    "signals": true
   },
   {
@@ -1230,7 +1174,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 1414341,
+   "usdVol24h": 1223588,
    "signals": true
   },
   {
@@ -1244,7 +1188,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 10938346,
+   "usdVol24h": 9266875,
    "signals": true
   },
   {
@@ -1258,7 +1202,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 3178036,
+   "usdVol24h": 3514818,
    "signals": true
   },
   {
@@ -1272,7 +1216,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 665513,
+   "usdVol24h": 488659,
    "signals": true
   },
   {
@@ -1286,7 +1230,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 8083050,
+   "usdVol24h": 8475333,
    "signals": true
   },
   {
@@ -1300,21 +1244,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 916158,
-   "signals": true
-  },
-  {
-   "tv": "CRYPTO:WAL",
-   "name": "WAL",
-   "group": "crypto",
-   "source": "coinbase",
-   "ticker": "WAL-USD",
-   "venues": {
-    "robinhood": false,
-    "coinbase": true,
-    "haltedIn": []
-   },
-   "usdVol24h": 3531873,
+   "usdVol24h": 662120,
    "signals": true
   },
   {
@@ -1328,7 +1258,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 333806,
+   "usdVol24h": 280484,
    "signals": true
   },
   {
@@ -1344,7 +1274,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 3413620,
+   "usdVol24h": 4806936,
    "signals": true
   },
   {
@@ -1360,7 +1290,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 516156,
+   "usdVol24h": 411470,
    "signals": true
   },
   {
@@ -1374,7 +1304,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 1095586,
+   "usdVol24h": 650684,
    "signals": true
   },
   {
@@ -1388,7 +1318,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 11116405,
+   "usdVol24h": 10008770,
    "signals": true
   },
   {
@@ -1404,7 +1334,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 2436405,
+   "usdVol24h": 1946891,
    "signals": true
   },
   {
@@ -1418,7 +1348,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 111182557,
+   "usdVol24h": 70450614,
    "signals": false
   },
   {
@@ -1432,7 +1362,7 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 100493,
+   "usdVol24h": 126192,
    "signals": true
   },
   {
@@ -1446,22 +1376,8 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 184797172,
+   "usdVol24h": 147996781,
    "signals": false
-  },
-  {
-   "tv": "CRYPTO:ZK",
-   "name": "ZK",
-   "group": "crypto",
-   "source": "coinbase",
-   "ticker": "ZK-USD",
-   "venues": {
-    "robinhood": false,
-    "coinbase": true,
-    "haltedIn": []
-   },
-   "usdVol24h": 3660527,
-   "signals": true
   },
   {
    "tv": "CRYPTO:ZORA",
@@ -1476,7 +1392,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 402666,
+   "usdVol24h": 293043,
    "signals": true
   },
   {
@@ -1492,7 +1408,7 @@
      "NY"
     ]
    },
-   "usdVol24h": 7368033,
+   "usdVol24h": 7909379,
    "signals": true
   },
   {
@@ -1506,37 +1422,22 @@
     "coinbase": true,
     "haltedIn": []
    },
-   "usdVol24h": 102152,
+   "usdVol24h": 40224,
    "signals": true
   },
   {
-   "tv": "BASE:SNDKC",
-   "name": "SNDKC",
-   "fullName": "Sandisk Corporation",
+   "tv": "BASE:XDP",
+   "name": "XDP",
+   "fullName": "Doppler Finance",
    "group": "crypto",
    "source": "gecko",
-   "ticker": "base:0x5a8236f575471e7bfca2c8462a200c28f737246e",
+   "ticker": "base:0x1ef035205f94c7734827961c438474d089a334a0",
    "onchain": "base",
    "venues": {
     "wallet": "base"
    },
-   "usdVol24h": 13694095,
-   "liquidityUsd": 1238939,
-   "signals": true
-  },
-  {
-   "tv": "SOLANA:ZEREBRO",
-   "name": "ZEREBRO",
-   "fullName": "zerebro",
-   "group": "crypto",
-   "source": "gecko",
-   "ticker": "solana:3sjNoCnkkhWPVXYGDtem8rCciHSGc9jSFZuUAzKbvRVp",
-   "onchain": "solana",
-   "venues": {
-    "wallet": "solana"
-   },
-   "usdVol24h": 15471322,
-   "liquidityUsd": 4043536,
+   "usdVol24h": 5083330,
+   "liquidityUsd": 1303030,
    "signals": true
   }
  ]
