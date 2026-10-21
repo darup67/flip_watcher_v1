@@ -576,11 +576,14 @@ async function matrix(send) {
         const mv = (r) => (r.prev_rank == null ? '' : r.prev_rank > r.rank ? `▲${r.prev_rank - r.rank}` : r.prev_rank < r.rank ? `▼${r.rank - r.prev_rank}` : '·');
         const b = tt.bench || {}, chg = tt.prev_top3 ? `was ${tt.prev_top3.join(', ')}` : 'first snapshot';
         secs.push({ title: `Monthly theme tracker (${tt.month}): leaders ${tt.top3.join(', ')}`,
-          note: `Ranked by 3-month return vs QQQ ${b.r3m >= 0 ? '+' : ''}${b.r3m}%. Trend = price vs 50/200-day averages. Research only, not advice.`,
+          note: `Ranked by 3-month return (QQQ ${b.r3m >= 0 ? '+' : ''}${b.r3m}%). Rebalance = tested monthly rule: hold the top 3, swap on ${tt.next_rebalance || 'the 1st'}. Research only.`,
           blocks: [{ type: 'para', text: `Top 3 by 3-month momentum: ${tt.top3.join(', ')} (${chg}). Beating QQQ over 3 months: ${tt.beating_qqq_3m.join(', ') || 'none'}. Turning up (back above the 200-day after a long stretch below): ${tt.turning_up.join(', ') || 'none'}.` },
-            { type: 'table', columns: [{ key: 'k', label: '#' }, { key: 's', label: 'ETF' }, { key: 'th', label: 'Theme' }, { key: 'm3', label: '3m', align: 'right' }, { key: 'm12', label: '12m', align: 'right' }, { key: 'hi', label: 'Off high', align: 'right' }, { key: 'tr', label: 'Trend' }],
+            { type: 'table', columns: [{ key: 'k', label: '#' }, { key: 's', label: 'ETF' }, { key: 'th', label: 'Theme' }, { key: 'm3', label: '3m', align: 'right' }, { key: 'm12', label: '12m', align: 'right' }, { key: 'hi', label: 'Off high', align: 'right' }, { key: 'tr', label: 'Trend' }, { key: 'lv', label: '50d / 200d', align: 'right' }, { key: 'rb', label: 'Rebalance' }],
               rows: tt.rows.map((r) => ({ k: `${r.rank} ${mv(r)}`, s: { v: r.sym, bold: true }, th: r.theme, m3: sp(r.r3m), m12: sp(r.r12m), hi: `${r.off_high}%`,
-                tr: { v: r.turning_up ? 'turning up' : r.trend, tone: r.trend === 'up' || r.turning_up ? 'good' : r.trend === 'down' ? 'bad' : 'neutral' } })) }] });
+                tr: { v: r.turning_up ? 'turning up' : r.trend, tone: r.trend === 'up' || r.turning_up ? 'good' : r.trend === 'down' ? 'bad' : 'neutral' },
+                lv: r.ma50 == null ? '–' : `${r.ma50} / ${r.ma200}`,
+                rb: { v: r.action || '–', bold: ['BUY', 'SELL', 'IN', 'HOLD'].includes(r.action), tone: ['BUY', 'IN', 'HOLD'].includes(r.action) ? 'good' : r.action === 'SELL' ? 'bad' : 'neutral' } })) },
+              { type: 'para', text: `Rule tested 2017-2026 on 14 theme ETFs: 24.4%/yr vs QQQ 21.0% (2022-26: 21.8% vs 13.9%; 2017-21: 27.0% vs 28.3%), worst drop -26%. Timing entries off the 50/200-day levels did not beat buying on any day, so the levels are reference only.` }] });
         themeMonth = tt.month;
       }
     } catch (e) { if (e.code !== 'ENOENT') log('theme tracker section failed: ' + e.message); }
