@@ -466,6 +466,7 @@ const MATRIX_FILE = path.join(DIR, 'headless-matrix.json');
 const GROUP_ORDER = ['your picks', 'leveraged ETFs', 'futures', 'crypto', 'mega tech', 'semis', 'software/security', 'hardware', 'sector ETFs', 'financials'];
 
 async function matrix(send) {
+  let themeMonth = null;   // set when the monthly theme section is included; marked shown only after a real send
   const results = await evaluateAll();
   const last = readJSON(MATRIX_FILE, {});
   const since = last.sentAt ? Date.parse(last.sentAt) : Date.now() - 24 * 3600e3;
@@ -487,7 +488,7 @@ async function matrix(send) {
   const hm = (t) => et(t, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
   const pc = (x) => (x == null ? '–' : Math.round(100 * x) + '%');
   const hour24 = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false });
-  const isAM = hour24 < 12;
+  const isAM = process.env.BRIEF_FORCE_AM ? true : hour24 < 12;   // BRIEF_FORCE_AM=1 for previews of the morning layout
   const sells = ok.length - buys;
 
   // 1. Trend by group: BUY chips first, then SELL; flipped since the last report get an amber ring.
@@ -567,6 +568,22 @@ async function matrix(send) {
           blocks: [{ type: 'table', columns: cols, rows: toks.slice(0, 3).map(row) }, { type: 'table', columns: cols, rows: toks.slice(-3).reverse().map(row) }] });
       }
     } catch (e) { log('sentiment section failed: ' + e.message); }
+    try {   // Monthly theme tracker (market-lab/research/theme_tracker.py, 1st of the month): shown in the first morning brief after each new snapshot
+      const tp = path.join(require('os').homedir(), 'market-lab', 'data', 'theme_tracker.json');
+      const tt = isAM ? JSON.parse(fs.readFileSync(tp, 'utf8')) : null;
+      if (tt && tt.shown !== tt.month) {
+        const sp = (x) => (x == null ? '–' : { v: `${x >= 0 ? '+' : ''}${x.toFixed(1)}%`, tone: x >= 0 ? 'good' : 'bad' });
+        const mv = (r) => (r.prev_rank == null ? '' : r.prev_rank > r.rank ? `▲${r.prev_rank - r.rank}` : r.prev_rank < r.rank ? `▼${r.rank - r.prev_rank}` : '·');
+        const b = tt.bench || {}, chg = tt.prev_top3 ? `was ${tt.prev_top3.join(', ')}` : 'first snapshot';
+        secs.push({ title: `Monthly theme tracker (${tt.month}): leaders ${tt.top3.join(', ')}`,
+          note: `Ranked by 3-month return vs QQQ ${b.r3m >= 0 ? '+' : ''}${b.r3m}%. Trend = price vs 50/200-day averages. Research only, not advice.`,
+          blocks: [{ type: 'para', text: `Top 3 by 3-month momentum: ${tt.top3.join(', ')} (${chg}). Beating QQQ over 3 months: ${tt.beating_qqq_3m.join(', ') || 'none'}. Turning up (back above the 200-day after a long stretch below): ${tt.turning_up.join(', ') || 'none'}.` },
+            { type: 'table', columns: [{ key: 'k', label: '#' }, { key: 's', label: 'ETF' }, { key: 'th', label: 'Theme' }, { key: 'm3', label: '3m', align: 'right' }, { key: 'm12', label: '12m', align: 'right' }, { key: 'hi', label: 'Off high', align: 'right' }, { key: 'tr', label: 'Trend' }],
+              rows: tt.rows.map((r) => ({ k: `${r.rank} ${mv(r)}`, s: { v: r.sym, bold: true }, th: r.theme, m3: sp(r.r3m), m12: sp(r.r12m), hi: `${r.off_high}%`,
+                tr: { v: r.turning_up ? 'turning up' : r.trend, tone: r.trend === 'up' || r.turning_up ? 'good' : r.trend === 'down' ? 'bad' : 'neutral' } })) }] });
+        themeMonth = tt.month;
+      }
+    } catch (e) { if (e.code !== 'ENOENT') log('theme tracker section failed: ' + e.message); }
     try {   // Jev memecoin desk (~/jev-desk) from data/brief.json: morning = last 24 h, closing = since 08:55
       const jraw = JSON.parse(fs.readFileSync(path.join(require('os').homedir(), 'jev-desk', 'data', 'brief.json'), 'utf8'));
       const jd = isAM ? jraw : (jraw.since_morning || jraw);
@@ -635,6 +652,7 @@ async function matrix(send) {
   UI.send(subject, spec, { timeoutMs: 60000 });
   if (process.env.EMAIL_SUBJECT_PREFIX) return;   // sample send: leave the real report bookkeeping alone
   fs.writeFileSync(MATRIX_FILE, JSON.stringify({ sentAt: new Date().toISOString(), buys, sells: ok.length - buys }, null, 1));
+  if (themeMonth) try { const tp = path.join(require('os').homedir(), 'market-lab', 'data', 'theme_tracker.json'), tt = JSON.parse(fs.readFileSync(tp, 'utf8')); tt.shown = themeMonth; fs.writeFileSync(tp, JSON.stringify(tt, null, 1)); } catch (e) { log('theme tracker mark failed: ' + e.message); }
   log(`MATRIX sent: ${buys} BUY / ${ok.length - buys} SELL · ${changes.length} flips since last`);
 }
 
