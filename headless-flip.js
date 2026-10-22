@@ -568,6 +568,18 @@ async function matrix(send) {
           blocks: [{ type: 'table', columns: cols, rows: toks.slice(0, 3).map(row) }, { type: 'table', columns: cols, rows: toks.slice(-3).reverse().map(row) }] });
       }
     } catch (e) { log('sentiment section failed: ' + e.message); }
+    try {   // Overnight earnings -> MNQ (jev-markets/research/earnings_gap.py, 08:40 ET): Nasdaq-100 reporters' extended-hours moves x index weight
+      const eg = isAM ? JSON.parse(fs.readFileSync(path.join(require('os').homedir(), 'jev-markets', 'data', 'earnings_gap.json'), 'utf8')) : null;
+      if (eg && Date.now() / 1000 - eg.t < 3 * 3600 && (eg.rows.length || (eg.missing || []).length)) {
+        const pt = (x) => (x == null ? '–' : { v: `${x >= 0 ? '+' : ''}${Math.round(x)} pts`, tone: x >= 0 ? 'good' : 'bad', bold: true });
+        const blocks = [{ type: 'para', text: `${eg.rows.length} Nasdaq-100 reporters ${eg.window} (${eg.weight_reported}% of the index) imply ${eg.implied_pts >= 0 ? '+' : ''}${Math.round(eg.implied_pts)} MNQ points` +
+          (eg.actual_pts != null ? `; NQ has moved ${eg.actual_pts >= 0 ? '+' : ''}${Math.round(eg.actual_pts)} since ${eg.nq_ref_at}, so ${Math.abs(eg.residual_pts) < 15 ? 'it is about priced in' : `the residual is ${eg.residual_pts >= 0 ? '+' : ''}${Math.round(eg.residual_pts)}`}.` : '.') }];
+        if ((eg.missing || []).length) blocks.push({ type: 'callout', tone: 'warn', text: `No price for ${eg.missing.join(', ')}: the total is incomplete.` });
+        if (eg.rows.length) blocks.push({ type: 'table', columns: [{ key: 's', label: 'Stock' }, { key: 'w', label: 'Weight', align: 'right' }, { key: 'm', label: 'Ext. move', align: 'right' }, { key: 'p', label: 'MNQ impact', align: 'right' }, { key: 'wh', label: 'When' }],
+          rows: eg.rows.slice(0, 8).map((r) => ({ s: { v: r.sym, bold: true }, w: `${r.weight.toFixed(2)}%`, m: { v: `${r.move_pct >= 0 ? '+' : ''}${r.move_pct.toFixed(1)}%`, tone: r.move_pct >= 0 ? 'good' : 'bad' }, p: pt(r.mnq_pts), wh: r.when })) });
+        secs.push({ title: `Overnight earnings: ${eg.implied_pts >= 0 ? '+' : ''}${Math.round(eg.implied_pts)} MNQ points implied`, note: 'Extended-hours move x Nasdaq-100 weight x NQ price, per reporter. Context, not a signal.', blocks });
+      }
+    } catch (e) { if (e.code !== 'ENOENT') log('earnings gap section failed: ' + e.message); }
     try {   // Monthly theme tracker (market-lab/research/theme_tracker.py, 1st of the month): shown in the first morning brief after each new snapshot
       const tp = path.join(require('os').homedir(), 'market-lab', 'data', 'theme_tracker.json');
       const tt = isAM ? JSON.parse(fs.readFileSync(tp, 'utf8')) : null;
